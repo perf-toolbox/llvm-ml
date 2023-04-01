@@ -46,3 +46,7 @@ For local development you may want to create a file named `user.bazelrc` with th
 ```starlark
 build --disk_cache=~/.cache/llvm-ml
 ```
+
+## License
+
+LLVM ML is released under the Apache License, Version 2.0. See LICENSE for more information.
