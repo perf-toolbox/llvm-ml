@@ -1,0 +1,25 @@
+# In opt mode, bazel by default builds both PIC and non-PIC object files for
+# tests vs binaries. We don't need this feature and it slows down opt builds
+# considerably.
+build --force_pic
+
+# Build with C++17
+build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+
+# Prevent invalid caching if input files are modified during a build.
+build --experimental_guard_against_concurrent_changes
+
+# Add layering check to all projects.
+build --features=layering_check
+
+build --experimental_guard_against_concurrent_changes
+build --incompatible_dont_enable_host_nonhost_crosstool_features=false
+build --per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
+build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
+
+build:debug --strip=never
+build:debug -g
+
+# Include user defines
+# It's a good practice to put something like 
+try-import %workspace%/user.bazelrc
