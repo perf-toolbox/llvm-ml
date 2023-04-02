@@ -24,6 +24,18 @@ algorithms. Here's how to use it:
 ./bazel-bin/llvm-mc-embedding/llvm-mc-embedding -o out.txt input.s
 ```
 
+### llvm-mc-extract
+
+`llvm-mc-extract` is a tool that takes a binary file as an input
+and produces a bunch of assembly files, that contain basic blocks.
+This tool can be used to obtain a dataset of real-world assembly
+code for further analysis or use with machine learning algorithms.
+Here's how to use it:
+
+```sh
+./bazel-bin/llvm-mc-extract/llvm-mc-extract -o /path/to/out/dir /path/to/bin
+```
+
 ## Dependencies
 
 LLVM ML requires the following dependencies:

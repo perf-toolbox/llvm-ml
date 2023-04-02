@@ -1,4 +1,4 @@
-//===--- llvm-mcembedding.cpp - Convert ASM to ML embeddings --------------===//
+//===--- llvm-mc-embedding.cpp - Convert ASM to ML embeddings -------------===//
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
