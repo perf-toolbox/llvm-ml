@@ -41,20 +41,40 @@ bazel_skylib_workspace()
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
 
+# Hack for broken zstd support
+new_local_repository(
+  name = "llvm_zstd",
+  build_file_content="""cc_library(name="zstd", visibility = ["//visibility:public"])""",
+  workspace_file_content="",
+  path="third_party/zstd_fake"
+)
+
 new_local_repository(
     name = "llvm-raw",
     build_file_content = "# empty",
     path = "third_party/llvm-project",
 )
 
-load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure", "llvm_disable_optional_support_deps")
+load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
 
-llvm_configure(name = "llvm-project")
+llvm_configure(
+  name = "llvm-project",
+  repo_mapping = {"@llvm_zlib": "@zlib"},
+  targets = [
+        "AArch64",
+        "X86",
+  ],
+)
 
-# Disables optional dependencies for Support like zlib and terminfo. You may
-# instead want to configure them using the macros in the corresponding bzl
-# files.
-llvm_disable_optional_support_deps()
+load("@llvm-raw//utils/bazel:terminfo.bzl", "llvm_terminfo_system")
+
+# We require successful detection and use of a system terminfo library.
+llvm_terminfo_system(name = "llvm_terminfo")
+
+load("@llvm-raw//utils/bazel:zlib.bzl", "llvm_zlib_system")
+
+# We require successful detection and use of a system zlib library.
+llvm_zlib_system(name = "zlib")
 
 load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
 boost_deps()
