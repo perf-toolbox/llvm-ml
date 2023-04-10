@@ -11,7 +11,9 @@
 #include <string>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -67,16 +69,17 @@ void map_and_restart() {
 
   void *res = nullptr;
   // Special case for storing stack info
-  if (gCmd->addr == (void*)0x2325000) {
-    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
-               gSharedMem, 4096);
+  if (gCmd->addr == (void *)0x2325000) {
+    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE,
+               MAP_SHARED | MAP_FIXED, gSharedMem, 4096);
   } else {
-    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
-               gSharedMem, 0);
+    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE,
+               MAP_SHARED | MAP_FIXED, gSharedMem, 0);
   }
 
   if (!res) {
-    llvm::errs() << "Failed to allocate pointer at address: " << gCmd->addr << "\n";
+    llvm::errs() << "Failed to allocate pointer at address: " << gCmd->addr
+                 << "\n";
     raise(SIGABRT);
   }
 
@@ -115,11 +118,18 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb) {
     // ready
     sleep(1);
 
+    // Pin process to thread.
+    cpu_set_t cpuSet;
+    CPU_ZERO(&cpuSet);
+    CPU_SET(1, &cpuSet);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuSet);
+    setpriority(PRIO_PROCESS, 0, 0);
+
     gBenchFn = bench;
     gSharedMem = shmemFD;
 
-    gOut =
-        mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmemFD, 4096 * 2);
+    gOut = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmemFD,
+                4096 * 2);
     gCmd = (PageFaultCommand *)mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
                                     MAP_SHARED, shmemFD, 4096 * 3);
 
@@ -178,7 +188,7 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb) {
 
       void *pageFaultAddress = siginfo.si_addr;
       void *restartAddress = (void *)&map_and_restart;
-      
+
       // TODO(Alex): do we need special handling for sigtrap?
       /*
       if (siginfo.si_signo == 5)
