@@ -5,15 +5,17 @@
 #pragma once
 
 #include <string>
+#include <functional>
 
 namespace llvm {
 class Error;
 }
 
 namespace llvm_ml {
-using BenchmarkFn = size_t (*)(void *);
+using BenchmarkFn = void (*)(void *, void *);
+using BenchmarkCb = std::function<void(size_t)>;
 
-llvm::Error run_benchmark(BenchmarkFn bench, const std::string &outFile);
+llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb);
 } // namespace llvm_ml
 
 extern "C" {

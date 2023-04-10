@@ -22,20 +22,28 @@
 #include "counters.hpp"
 
 constexpr unsigned MAX_FAULTS = 30;
-constexpr size_t INIT_VALUE = 0x2324000;
-constexpr size_t ADDR_OF_AUX_MEM = 0x0000700000000000;
 
 struct PageFaultCommand {
   void *addr;
+  // TODO(Alex): figure out if we really need this
   bool unmapFirst;
 };
 
-int gSharedMem = 42;
-size_t gRunnerEnd = 0;
-llvm_ml::BenchmarkFn gBenchFn = nullptr;
-llvm_ml::CountersContext *gCont;
-PageFaultCommand *gCmd;
+// Global vairables are used to simplify the assembly code.
+// These shall only be used by the child process.
 
+/// File descriptor of shared memory
+int gSharedMem = 42;
+/// Function pointer of benchmark workload
+llvm_ml::BenchmarkFn gBenchFn = nullptr;
+/// Context to manipulate PMUs
+llvm_ml::CountersContext *gCont;
+/// Info about which address should be used to map page
+PageFaultCommand *gCmd;
+/// Pointer to PMU values to be passed to parent
+void *gOut;
+
+/// Aligns pointer to memory page size
 static void alignPtr(size_t &ptr) {
   // FIXME: Assuming page size is 4096
   ptr >>= 12;
@@ -52,71 +60,43 @@ extern "C" {
 void map_and_restart() {
   alignPtr(gCmd->addr);
 
-  (void)mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-             gSharedMem, 0);
-
-  gBenchFn(gCont);
-}
-
-static void unmap_unused_pages() {
-  std::array<std::pair<size_t, size_t>, 13> ptrs = {
-      std::make_pair(reinterpret_cast<size_t>(&unmap_unused_pages),
-                     (size_t) && label + PAGE_SIZE),
-      {reinterpret_cast<size_t>(&gBenchFn), 0},
-      {reinterpret_cast<size_t>(&llvm_ml::run_benchmark),
-       gRunnerEnd + PAGE_SIZE},
-      {reinterpret_cast<size_t>(&counters_start), 0},
-      {reinterpret_cast<size_t>(&counters_stop), 0},
-      {reinterpret_cast<size_t>(&counters_cycles), 0},
-      {reinterpret_cast<size_t>(&mmap),
-       reinterpret_cast<size_t>(&mmap) + 4 * PAGE_SIZE},
-      {reinterpret_cast<size_t>(&munmap),
-       reinterpret_cast<size_t>(&munmap) + 4 * PAGE_SIZE},
-      {reinterpret_cast<size_t>(&llvm_ml::counters_free), 0},
-      {reinterpret_cast<size_t>(&llvm_ml::counters_init), 0},
-      {reinterpret_cast<size_t>(&close), 0},
-      {reinterpret_cast<size_t>(&_exit), 0},
-      {reinterpret_cast<size_t>(&gSharedMem), 0},
-  };
-
-  for (auto &iptr : ptrs) {
-    alignPtr(iptr.first);
-    alignPtr(iptr.second);
+  if (!gCmd->addr) {
+    llvm::errs() << "Invalid access. First page is reserved by the OS.\n";
+    raise(SIGABRT);
   }
 
-  std::sort(ptrs.begin(), ptrs.end(),
-            [](auto l, auto r) { return l.first < r.first; });
-
-  constexpr size_t maxPage = 0x0000700000001000;
-
-  size_t curPtr = 0;
-  for (auto &iptr : ptrs) {
-    munmap(reinterpret_cast<void *>(curPtr), iptr.first - curPtr);
-    curPtr = (iptr.second == 0 ? iptr.first : iptr.second) + PAGE_SIZE;
+  void *res = nullptr;
+  // Special case for storing stack info
+  if (gCmd->addr == (void*)0x2325000) {
+    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
+               gSharedMem, 4096);
+  } else {
+    res = mmap(gCmd->addr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
+               gSharedMem, 0);
   }
-  munmap(reinterpret_cast<void *>(curPtr + PAGE_SIZE),
-         maxPage - curPtr + PAGE_SIZE);
-label:
-  return;
+
+  if (!res) {
+    llvm::errs() << "Failed to allocate pointer at address: " << gCmd->addr << "\n";
+    raise(SIGABRT);
+  }
+
+  gBenchFn(gCont, gOut);
+  llvm_ml::counters_free(gCont);
+  close(gSharedMem);
+  _exit(0);
 }
 }
 
 namespace llvm_ml {
-
-static void restart_child(pid_t pid, void *restart_addr, void *fault_addr,
-                          int shm_fd) {
+static void restartChild(pid_t pid, void *restart_addr) {
   struct user_regs_struct regs;
   ptrace(PTRACE_GETREGS, pid, NULL, &regs);
   regs.rip = (unsigned long)restart_addr;
-  // regs.rax = (unsigned long)fault_addr;
-  // regs.r11 = shm_fd;
-  // regs.r12 = MAP_SHARED;
-  // regs.r13 = PROT_READ|PROT_WRITE;
   ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   ptrace(PTRACE_CONT, pid, NULL, NULL);
 }
 
-static int allocate_shmem() {
+static int allocateSharedMemory() {
   constexpr auto path = "shmem-path";
   int fd = shm_open(path, O_RDWR | O_CREAT, 0777);
   shm_unlink(path);
@@ -124,43 +104,44 @@ static int allocate_shmem() {
   return fd;
 }
 
-llvm::Error run_benchmark(BenchmarkFn bench, const std::string &outFile) {
+llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb) {
   int status;
-  int shmemFD = allocate_shmem();
+  int shmemFD = allocateSharedMemory();
 
   pid_t child = fork();
 
   if (child == 0) {
+    // FIXME(Alex): there must be a better way to wait for parent to become
+    // ready
     sleep(1);
+
     gBenchFn = bench;
-    gRunnerEnd = (size_t) && end;
-    dup2(shmemFD, 42);
-    signal(SIGSEGV, SIG_DFL);
-    void *outPtr =
-        mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmemFD, 4096);
+    gSharedMem = shmemFD;
+
+    gOut =
+        mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmemFD, 4096 * 2);
     gCmd = (PageFaultCommand *)mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
-                                    MAP_SHARED, shmemFD, 4096 * 2);
-    // unmap_unused_pages();
+                                    MAP_SHARED, shmemFD, 4096 * 3);
+
+    // LLVM installs its own segfault handler. We don't need that.
+    signal(SIGSEGV, SIG_DFL);
+
     gCont = llvm_ml::counters_init();
-    size_t cycles = bench(gCont);
+
+    bench(gCont, gOut);
+
     llvm_ml::counters_free(gCont);
-
-    *static_cast<size_t *>(outPtr) = cycles;
-
     close(shmemFD);
-
     _exit(0);
   } else { // close(fds[0]);
     signal(SIGSEGV, SIG_DFL);
 
     gCmd = (PageFaultCommand *)mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
-                                    MAP_SHARED, shmemFD, 4096 * 2);
-    // void *physPage = mmap(nullptr, PAGE_SIZE, PROT_READ|PROT_WRITE,
-    // MAP_SHARED, shmemFD, 0); (void)physPage;
+                                    MAP_SHARED, shmemFD, 4096 * 3);
 
     ptrace(PTRACE_SEIZE, child, NULL, NULL);
 
-    char *last_failing_inst = 0;
+    void *lastSignaledInstruction = nullptr;
     bool mappingDone = false;
 
     for (unsigned i = 0; i < MAX_FAULTS; i++) {
@@ -169,9 +150,9 @@ llvm::Error run_benchmark(BenchmarkFn bench, const std::string &outFile) {
       if (WIFEXITED(status) || child == -1) {
         if (WEXITSTATUS(status) == 0) {
           void *outPtr = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED,
-                              shmemFD, 4096);
+                              shmemFD, 4096 * 2);
           size_t cycles = *static_cast<size_t *>(outPtr);
-          llvm::dbgs() << "Cycles total : " << cycles << "\n";
+          cb(cycles);
           return llvm::Error::success();
         }
 
@@ -195,28 +176,31 @@ llvm::Error run_benchmark(BenchmarkFn bench, const std::string &outFile) {
             std::make_error_code(std::errc::invalid_argument),
             "Incorrect signal %i", siginfo.si_signo);
 
-      void *fault_addr = siginfo.si_addr;
-      void *restart_addr = (void *)&map_and_restart;
+      void *pageFaultAddress = siginfo.si_addr;
+      void *restartAddress = (void *)&map_and_restart;
+      
+      // TODO(Alex): do we need special handling for sigtrap?
+      /*
       if (siginfo.si_signo == 5)
         fault_addr = (void *)INIT_VALUE;
+      */
 
-      gCmd->addr = fault_addr;
+      gCmd->addr = pageFaultAddress;
 
-      if ((char *)regs.rip == last_failing_inst)
+      if ((void *)regs.rip == lastSignaledInstruction)
         return llvm::createStringError(
             std::make_error_code(std::errc::invalid_argument),
-            "Same instruction failed twice");
+            "Same instruction failed twice: %x", regs.rip);
 
-      last_failing_inst = (char *)regs.rip;
+      lastSignaledInstruction = (void *)regs.rip;
 
-      restart_child(child, restart_addr, fault_addr, shmemFD);
+      restartChild(child, restartAddress);
     }
 
     kill(child, SIGKILL);
     close(shmemFD);
   }
 
-end:
   return llvm::createStringError(
       std::make_error_code(std::errc::invalid_argument), "Unknown error");
 }

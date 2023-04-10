@@ -19,6 +19,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include <iostream>
+
 #include "counters.hpp"
 
 struct ReadFormat {

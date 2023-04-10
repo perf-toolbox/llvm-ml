@@ -36,6 +36,25 @@ Here's how to use it:
 ./bazel-bin/llvm-mc-extract/llvm-mc-extract -o /path/to/out/dir /path/to/bin
 ```
 
+### llvm-mc-bench
+
+**X86 only!**
+
+`llvm-mc-bench` is a latency measurement tool that operates on X86 assembly
+files. It measures the latency of a basic block contained in an assembly file,
+providing a real-world dataset of assembly code block latencies for performance
+analysis.
+
+Here's how to use it:
+
+```sh
+./bazel-bin/llvm-mc-bench/llvm-mc-bench -o /path/to/out.yaml /path/to/bb.s
+```
+
+The `-o` option specifies the output file path for the generated YAML file
+containing latency measurements. The input file path is specified as the path
+to the X86 assembly file containing the basic block to measure.
+
 ## Dependencies
 
 LLVM ML requires the following dependencies:

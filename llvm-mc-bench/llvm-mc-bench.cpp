@@ -43,24 +43,63 @@ constexpr auto kHarnessTemplate = R"(
       declare void @counters_stop(ptr noundef)
       declare i64 @counters_cycles(ptr noundef)
 
-      define i64 @bench(ptr noundef %0) {
+      define void @bench(ptr noundef %ctrctx, ptr noundef %out) {
       entry:
-        call void @counters_start(ptr noundef %0)
-        %before = call i64 @counters_cycles(ptr noundef %0)
+        call void @counters_start(ptr noundef %ctrctx)
+        %before = call i64 @counters_cycles(ptr noundef %ctrctx)
+
         ; INSERT BASIC BLOCK HERE
-        call void @counters_stop(ptr noundef %0)
+        call void @counters_stop(ptr noundef %ctrctx)
 
-        %after = call i64 @counters_cycles(ptr noundef %0)
+        %after = call i64 @counters_cycles(ptr noundef %ctrctx)
 
-        %1 = sub i64 %after, %before
+        %cycles = sub i64 %after, %before
+        store i64 %cycles, ptr %out, align 8
 
-        ret i64 %1 
+        ret void
       }
 
       attributes #1 = { nounwind }
     )";
 
+// TODO(Alex) I wonder if the same can be achieved by simply putting
+// all of the assembly basic blocks into their own function. Would this
+// make the code more portable and concise?
 constexpr auto Prologue = R"(
+  push %rax
+  push %rbx
+  push %rcx
+  push %rdx
+  push %rsi
+  push %rdi
+  push %r8
+  push %r9
+  push %r10
+  push %r11
+  push %r12
+  push %r13
+  push %r14
+  push %r15
+
+  movq %rbp, %rax
+  movq $$0x2325000, %rbx
+  movq %rax, (%rbx)
+
+  movq %rsp, %rax
+  movq %rax, 16(%rbx)
+
+  movq $$512, %rdi
+  movq $$0x2324000, %rbx
+  shr $$12, %rbx
+  shl $$12, %rbx
+
+  movq %rax, %rbp
+  add $$2048, %rbp
+  mov %rbp, %rsp
+  shr $$5, %rsp
+  shl $$5, %rsp
+  sub $$0x10, %rsp
+
   movq $$0x2324000, %rax 
   movq $$0x2324000, %rbx  
   movq $$0x2324000, %rcx 
@@ -77,6 +116,30 @@ constexpr auto Prologue = R"(
   movq $$0x2324000, %r15 
 )";
 
+constexpr auto Epilogue = R"(
+  movq $$0x2325000, %rbx
+  movq (%rbx), %rax
+  movq %rax, %rbp
+
+  movq 16(%rbx), %rax
+  movq %rax, %rsp
+
+  pop %r15
+  pop %r14
+  pop %r13
+  pop %r12
+  pop %r11
+  pop %r10
+  pop %r9
+  pop %r8
+  pop %rdi
+  pop %rsi
+  pop %rdx
+  pop %rcx
+  pop %rbx
+  pop %rax
+)";
+
 static mc::RegisterMCTargetOptionsFlags MOF;
 
 static cl::opt<std::string>
@@ -87,25 +150,24 @@ static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
 static cl::opt<int> NumRuns("n", cl::desc("number or repititions"),
                             cl::init(10000));
 
-static llvm::cl::opt<std::string>
-    ArchName("arch", llvm::cl::desc("Target arch to assemble for, "
-                                    "see -version for available targets"));
+static cl::opt<std::string>
+    ArchName("arch", cl::desc("Target arch to assemble for, "
+                              "see -version for available targets"));
 
-static llvm::cl::opt<std::string>
-    TripleName("triple", llvm::cl::desc("Target triple to assemble for, "
-                                        "see -version for available targets"));
+static cl::opt<std::string>
+    TripleName("triple", cl::desc("Target triple to assemble for, "
+                                  "see -version for available targets"));
 
-static const llvm::Target *getTarget() {
+static const Target *getTarget() {
   // Figure out the target triple.
   if (TripleName.empty())
-    TripleName = llvm::sys::getDefaultTargetTriple();
+    TripleName = sys::getDefaultTargetTriple();
 
-  llvm::Triple triple(llvm::Triple::normalize(TripleName));
+  Triple triple(Triple::normalize(TripleName));
 
   // Get the target specific parser.
   std::string Error;
-  const llvm::Target *target =
-      llvm::TargetRegistry::lookupTarget(ArchName, triple, Error);
+  const Target *target = TargetRegistry::lookupTarget(ArchName, triple, Error);
   if (!target) {
     return nullptr;
   }
@@ -126,7 +188,7 @@ int main(int argc, char **argv) {
 
   cl::ParseCommandLineOptions(argc, argv, "benchmark ASM basic blocks\n");
 
-  const llvm::Target *target = getTarget();
+  const Target *target = getTarget();
 
   if (!target) {
     errs() << "Failed to create target. You can specify triple manually like "
@@ -134,26 +196,24 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  llvm::Triple triple(TripleName);
+  Triple triple(TripleName);
 
-  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> buffer =
-      llvm::MemoryBuffer::getFileOrSTDIN(InputFilename, /*IsText=*/true);
+  ErrorOr<std::unique_ptr<MemoryBuffer>> buffer =
+      MemoryBuffer::getFileOrSTDIN(InputFilename, /*IsText=*/true);
   if (std::error_code EC = buffer.getError()) {
     return 1;
   }
 
-  const llvm::MCTargetOptions options =
-      llvm::mc::InitMCTargetOptionsFromFlags();
-  std::unique_ptr<llvm::MCRegisterInfo> mcri(
-      target->createMCRegInfo(TripleName));
-  std::unique_ptr<llvm::MCAsmInfo> mcai(
+  const MCTargetOptions options = mc::InitMCTargetOptionsFromFlags();
+  std::unique_ptr<MCRegisterInfo> mcri(target->createMCRegInfo(TripleName));
+  std::unique_ptr<MCAsmInfo> mcai(
       target->createMCAsmInfo(*mcri, TripleName, options));
-  std::unique_ptr<llvm::MCSubtargetInfo> msti(
+  std::unique_ptr<MCSubtargetInfo> msti(
       target->createMCSubtargetInfo(TripleName, "", ""));
-  std::unique_ptr<llvm::MCInstrInfo> mcii(target->createMCInstrInfo());
+  std::unique_ptr<MCInstrInfo> mcii(target->createMCInstrInfo());
 
-  llvm::MCContext context(triple, mcai.get(), mcri.get(), msti.get());
-  std::unique_ptr<llvm::MCObjectFileInfo> mcofi(
+  MCContext context(triple, mcai.get(), mcri.get(), msti.get());
+  std::unique_ptr<MCObjectFileInfo> mcofi(
       target->createMCObjectFileInfo(context, /*PIC=*/false));
   context.setObjectFileInfo(mcofi.get());
 
@@ -181,6 +241,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < NumRuns; i++) {
     inlineAsm += microbenchAsm;
   }
+  inlineAsm += Epilogue;
 
   inlineAsm += "\", \"\"() #1\n";
 
@@ -209,7 +270,7 @@ int main(int argc, char **argv) {
 
   auto jit = cantFail(orc::LLJITBuilder().create());
 
-  orc::MangleAndInterner Mangle(jit->getExecutionSession(), *DL);
+  orc::MangleAndInterner mangle(jit->getExecutionSession(), *DL);
 
   auto &dylib = jit->getMainJITDylib();
   orc::ExecutorSymbolDef countersStartPtr(
@@ -218,21 +279,11 @@ int main(int argc, char **argv) {
       orc::ExecutorAddr::fromPtr(&counters_stop), JITSymbolFlags::Exported);
   orc::ExecutorSymbolDef countersCyclesPtr(
       orc::ExecutorAddr::fromPtr(&counters_cycles), JITSymbolFlags::Exported);
-  cantFail(dylib.define(llvm::orc::absoluteSymbols(orc::SymbolMap({
-      {Mangle("counters_start"), countersStartPtr},
-      {Mangle("counters_stop"), countersStopPtr},
-      {Mangle("counters_cycles"), countersCyclesPtr},
+  cantFail(dylib.define(orc::absoluteSymbols(orc::SymbolMap({
+      {mangle("counters_start"), countersStartPtr},
+      {mangle("counters_stop"), countersStopPtr},
+      {mangle("counters_cycles"), countersCyclesPtr},
   }))));
-
-  /*
-  auto dlsg =
-  orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(DL->getGlobalPrefix());
-  if (!dlsg) {
-    llvm::errs() << "Failed to create library search generator\n";
-    return 1;
-  }
-  jit->getMainJITDylib().addGenerator(std::move(*dlsg));
-  */
 
   cantFail(jit->addIRModule(
       orc::ThreadSafeModule(std::move(module), std::move(llvmContext))));
@@ -245,9 +296,17 @@ int main(int argc, char **argv) {
 
   llvm_ml::BenchmarkFn benchFunc = symbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  auto maybeErr = llvm_ml::run_benchmark(benchFunc, "");
+  const auto cb = [](size_t cycles) {
+    std::error_code error;
+    raw_fd_ostream outfile(OutputFilename, error, sys::fs::OF_None);
+    outfile << "results:\n";
+    outfile << "  cycles: " << cycles << "\n";
+    outfile.close();
+  };
+
+  auto maybeErr = llvm_ml::runBenchmark(benchFunc, cb);
   if (maybeErr) {
-    llvm::errs() << "Child terminated abnormally... " << maybeErr << "\n";
+    errs() << "Child terminated abnormally... " << maybeErr << "\n";
     return 1;
   }
 
