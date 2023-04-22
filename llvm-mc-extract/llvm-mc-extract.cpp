@@ -42,6 +42,9 @@ static cl::opt<std::string> InputFilename(cl::Positional,
 static cl::opt<std::string> OutputDirectory("o", cl::desc("output directory"),
                                             cl::Required);
 
+static cl::opt<std::string> Prefix("prefix", cl::desc("result files prefix"),
+                                   cl::Required);
+
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
                               "see -version for available targets"));
@@ -139,7 +142,7 @@ static void extractBasicBlocks(const object::ObjectFile &object,
     const auto getPath = [&]() {
       SmallVector<char, 128> path;
       sys::path::append(path, OutputDirectory,
-                        (Twine(blockCounter) + ".s").str());
+                        (Twine(Prefix) + Twine(blockCounter) + ".s").str());
       return std::string(path.begin(), path.end());
     };
 
