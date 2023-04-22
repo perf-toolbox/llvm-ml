@@ -9,6 +9,7 @@ cc_binary(
         "counters_linux.cpp",
         "benchmark_linux.cpp"
       ],
+      "//conditions:default": [],
     }),
     deps = [
       "@llvm-project//llvm:Support",

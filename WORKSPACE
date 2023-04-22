@@ -3,6 +3,7 @@ workspace(name = "llvm-ml")
 SKYLIB_VERSION = "1.0.3"
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 http_archive(
     name = "bazel_skylib",
@@ -25,6 +26,7 @@ http_archive(
     strip_prefix = "rules_boost-5729d34dcf595874f32b9f1aa1134db65fe78fda",
     sha256 = "bf488e4c472832a303d31ed20ea0ffdd8fa974654969b0c129b7c0ce4273f103",
 )
+
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
 http_archive(
@@ -33,6 +35,12 @@ http_archive(
     url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/800b9cd260ce3878e94abb7d583a7c0865f7d967.tar.gz",
     strip_prefix = "bazel-compile-commands-extractor-800b9cd260ce3878e94abb7d583a7c0865f7d967",
     sha256 = "7f6ebb62298694d8cf3ecaed81b3bb48de559819ac1909d4055abdc8c0ae1000",
+)
+
+git_repository(
+  name = "nlohmann_json",
+  commit = "bbe337c3a30d5f6eea418b4aee399525536de37a",
+  remote = "https://github.com/nlohmann/json.git",
 )
 
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")

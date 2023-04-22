@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "Target.hpp"
+
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -34,12 +36,21 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/graph/adj_list_serialize.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <nlohmann/json.hpp>
 
 #include <fstream>
 #include <iostream>
 
+using json = nlohmann::json;
+
 struct NodeFeatures {
-  uint32_t opcode; ///< Opcode of the instruction
+  uint32_t opcode = 0; ///< Opcode of the instruction
+  bool isLoad = false; ///< true if the instruction performs global memory load
+  bool isStore =
+      false; ///< true if the instruction performs global memory store
+  bool isBarrier = false; ///< true if the instruction emits execution barrier
+  bool isAtomic = false;  ///< true if instruction is an atomic instruction
+  bool isVector = false;  ///< true if the instruction is a vector instruction
 
 private:
   friend class boost::serialization::access;
@@ -202,30 +213,61 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  auto mlTarget =
+      llvm_ml::createX86Target(mcri.get(), mcai.get(), msti.get(), mcii.get());
+
   using Graph = boost::adjacency_list<boost::vecS, boost::vecS,
                                       boost::directedS, NodeFeatures>;
 
   Graph g(instructions->size());
 
-  // Extract the node and edge features and add them to the graph
-  for (int i = 0; i < instructions->size(); i++) {
-    // Extract the opcode of the instruction and add it as a node feature
-    NodeFeatures node_feat;
-    node_feat.opcode = (*instructions)[i].getOpcode();
-    boost::put(boost::vertex_bundle, g, i, node_feat);
+  auto nodes = json::array();
+  auto edges = json::array();
 
-    // Extract the latency between the current instruction and its successors
-    // and add it as an edge feature
-    for (int j = i + 1; j < instructions->size(); j++) {
-      // TODO do we need to add any edge features here?
-      boost::add_edge(i, j, g);
+  for (size_t i = 0; i < instructions->size(); i++) {
+    // Extract the opcode of the instruction and add it as a node feature
+    NodeFeatures features;
+    features.opcode = (*instructions)[i].getOpcode();
+    features.isLoad = mlTarget->isMemLoad((*instructions)[i]);
+    features.isStore = mlTarget->isMemStore((*instructions)[i]);
+    features.isBarrier = mlTarget->isBarrier((*instructions)[i]);
+    features.isVector = mlTarget->isVector((*instructions)[i]);
+
+    auto node = json::object();
+    node["opcode"] = features.opcode;
+    node["is_load"] = features.isLoad;
+    node["is_store"] = features.isStore;
+    node["is_barrier"] = features.isBarrier;
+    node["is_vector"] = features.isVector;
+    nodes.push_back(node);
+
+    boost::put(boost::vertex_bundle, g, i, features);
+  }
+
+  std::unordered_map<unsigned, size_t> lastWrite;
+
+  for (size_t i = 0; i < instructions->size(); i++) {
+    auto readRegs = mlTarget->getReadRegisters((*instructions)[i]);
+    auto writeRegs = mlTarget->getReadRegisters((*instructions)[i]);
+
+    for (unsigned reg : readRegs) {
+      if (lastWrite.count(reg)) {
+        boost::add_edge(lastWrite.at(reg), i, g);
+        auto edge = json({lastWrite.at(reg), i});
+        edges.push_back(edge);
+      }
+    }
+
+    for (unsigned reg : writeRegs) {
+      lastWrite[reg] = i;
     }
   }
 
   std::ofstream ofs(OutputFilename.c_str());
-  boost::archive::text_oarchive oa(ofs);
-
-  oa << g;
+  json out;
+  out["nodes"] = nodes;
+  out["edges"] = edges;
+  ofs << out.dump();
 
   ofs.close();
 
