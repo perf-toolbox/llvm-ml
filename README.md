@@ -21,7 +21,7 @@ features from compilation result and use them in machine learning
 algorithms. Here's how to use it:
 
 ```sh
-./bazel-bin/llvm-mc-embedding/llvm-mc-embedding -o out.txt input.s
+./bazel-bin/llvm-mc-embedding/llvm-mc-embedding -o out.s.json input.s
 ```
 
 ### llvm-mc-extract
@@ -33,7 +33,8 @@ code for further analysis or use with machine learning algorithms.
 Here's how to use it:
 
 ```sh
-./bazel-bin/llvm-mc-extract/llvm-mc-extract -o /path/to/out/dir /path/to/bin
+./bazel-bin/llvm-mc-extract/llvm-mc-extract -o /path/to/out/dir /path/to/bin \
+  --prefix app
 ```
 
 ### llvm-mc-bench
@@ -54,6 +55,12 @@ Here's how to use it:
 The `-o` option specifies the output file path for the generated YAML file
 containing latency measurements. The input file path is specified as the path
 to the X86 assembly file containing the basic block to measure.
+
+There's also a batch runner, that can process the entire directory:
+
+```sh
+python3 ./llvm-mc-bench/batch_measure.py -j 4 /path/to/input /path/to/output
+```
 
 ## Dependencies
 
