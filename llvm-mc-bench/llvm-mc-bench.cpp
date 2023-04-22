@@ -1,4 +1,5 @@
 //===--- llvm-mc-bench.cpp - Benchmark ASM basic blocks -------------------===//
+//
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
@@ -48,7 +49,24 @@ constexpr auto kHarnessTemplate = R"(
         call void @counters_start(ptr noundef %ctrctx)
         %before = call i64 @counters_cycles(ptr noundef %ctrctx)
 
-        ; INSERT BASIC BLOCK HERE
+        ; WORKLOAD
+        call void @counters_stop(ptr noundef %ctrctx)
+
+        %after = call i64 @counters_cycles(ptr noundef %ctrctx)
+
+        %cycles = sub i64 %after, %before
+        store i64 %cycles, ptr %out, align 8
+
+        ret void
+      }
+
+      define void @baseline(ptr noundef %ctrctx, ptr noundef %out) {
+      entry:
+        call void @counters_start(ptr noundef %ctrctx)
+        %before = call i64 @counters_cycles(ptr noundef %ctrctx)
+
+        ; NOISE 
+
         call void @counters_stop(ptr noundef %ctrctx)
 
         %after = call i64 @counters_cycles(ptr noundef %ctrctx)
@@ -150,6 +168,10 @@ static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
 static cl::opt<int> NumRuns("n", cl::desc("number or repititions"),
                             cl::init(10000));
 
+static cl::opt<int>
+    PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
+              cl::init(0));
+
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
                               "see -version for available targets"));
@@ -234,20 +256,30 @@ int main(int argc, char **argv) {
     }
   }
 
-  std::string inlineAsm = "call void asm sideeffect \"";
+  const auto buildInlineAsm = [&](bool addWorkload) {
+    std::string inlineAsm = "call void asm sideeffect \"";
 
-  inlineAsm += Prologue;
+    inlineAsm += Prologue;
 
-  for (int i = 0; i < NumRuns; i++) {
-    inlineAsm += microbenchAsm;
-  }
-  inlineAsm += Epilogue;
+    if (addWorkload) {
+      for (int i = 0; i < NumRuns; i++) {
+        inlineAsm += microbenchAsm;
+      }
+    }
+    inlineAsm += Epilogue;
 
-  inlineAsm += "\", \"\"() #1\n";
+    inlineAsm += "\", \"\"() #1\n";
+
+    return inlineAsm;
+  };
 
   std::string completeHarness = kHarnessTemplate;
-  size_t insertPos = completeHarness.find("; INSERT BASIC BLOCK HERE");
-  completeHarness.insert(insertPos, inlineAsm);
+  {
+    size_t insertPos = completeHarness.find("; WORKLOAD");
+    completeHarness.insert(insertPos, buildInlineAsm(true));
+    insertPos = completeHarness.find("; NOISE");
+    completeHarness.insert(insertPos, buildInlineAsm(false));
+  }
 
   auto llvmContext = std::make_unique<LLVMContext>();
 
@@ -288,27 +320,52 @@ int main(int argc, char **argv) {
   cantFail(jit->addIRModule(
       orc::ThreadSafeModule(std::move(module), std::move(llvmContext))));
 
-  auto symbol = jit->lookup("bench");
-  if (!symbol) {
-    errs() << "Error: " << toString(symbol.takeError()) << "\n";
+  auto benchSymbol = jit->lookup("bench");
+  if (!benchSymbol) {
+    errs() << "Error: " << toString(benchSymbol.takeError()) << "\n";
+    return 1;
+  }
+  auto noiseSymbol = jit->lookup("baseline");
+  if (!noiseSymbol) {
+    errs() << "Error: " << toString(noiseSymbol.takeError()) << "\n";
     return 1;
   }
 
-  llvm_ml::BenchmarkFn benchFunc = symbol->toPtr<llvm_ml::BenchmarkFn>();
+  llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
+  llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  const auto cb = [](size_t cycles) {
-    std::error_code error;
-    raw_fd_ostream outfile(OutputFilename, error, sys::fs::OF_None);
-    outfile << "results:\n";
-    outfile << "  cycles: " << cycles << "\n";
-    outfile.close();
+  std::string result;
+  raw_string_ostream ros{result};
+  ros << "results:\n";
+  ros << "  num_runs: " << NumRuns << "\n";
+
+  size_t noise = 0;
+  const auto noiseCb = [&noise, &ros](size_t cycles) {
+    noise = cycles;
+    ros << "  noise: " << cycles << "\n";
+  };
+  const auto benchCb = [&noise, &ros](size_t cycles) {
+    ros << "  total_cycles: " << cycles << "\n";
+    ros << "  cycles: " << (cycles - noise) << "\n";
   };
 
-  auto maybeErr = llvm_ml::runBenchmark(benchFunc, cb);
+  auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
+  if (maybeErr) {
+    errs() << "Failed to measure system noise... " << maybeErr << "\n";
+    return 1;
+  }
+  maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
   if (maybeErr) {
     errs() << "Child terminated abnormally... " << maybeErr << "\n";
     return 1;
   }
+
+  ros.flush();
+
+  std::error_code errorCode;
+  raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
+  outfile << result;
+  outfile.close();
 
   return 0;
 }

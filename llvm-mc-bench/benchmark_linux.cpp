@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -16,6 +17,7 @@
 #include <sys/time.h>
 #include <sys/user.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 #include "llvm/Support/Error.h"
@@ -107,7 +109,8 @@ static int allocateSharedMemory() {
   return fd;
 }
 
-llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb) {
+llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
+                         int pinnedCPU) {
   int status;
   int shmemFD = allocateSharedMemory();
 
@@ -116,12 +119,12 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb) {
   if (child == 0) {
     // FIXME(Alex): there must be a better way to wait for parent to become
     // ready
-    sleep(1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
     // Pin process to thread.
     cpu_set_t cpuSet;
     CPU_ZERO(&cpuSet);
-    CPU_SET(1, &cpuSet);
+    CPU_SET(pinnedCPU, &cpuSet);
     sched_setaffinity(0, sizeof(cpu_set_t), &cpuSet);
     setpriority(PRIO_PROCESS, 0, 0);
 

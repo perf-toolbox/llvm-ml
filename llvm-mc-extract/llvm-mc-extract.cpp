@@ -109,6 +109,7 @@ static void extractBasicBlocks(const object::ObjectFile &object,
   unsigned asmVariant = mcai->getAssemblerDialect();
   std::unique_ptr<MCInstPrinter> instPrinter(
       target->createMCInstPrinter(triple, asmVariant, *mcai, *mcii, *mcri));
+  instPrinter->setPrintImmHex(false);
 
   const auto isBlockTerminator = [&](const MCInst &inst) {
     const MCInstrDesc &desc = mcii->get(inst.getOpcode());

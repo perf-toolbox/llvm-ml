@@ -15,7 +15,8 @@ namespace llvm_ml {
 using BenchmarkFn = void (*)(void *, void *);
 using BenchmarkCb = std::function<void(size_t)>;
 
-llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb);
+llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
+                         int pinnedCPU);
 } // namespace llvm_ml
 
 extern "C" {
