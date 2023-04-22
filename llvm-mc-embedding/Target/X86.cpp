@@ -81,6 +81,16 @@ public:
     return false;
   }
 
+  bool isCompute(const llvm::MCInst &inst) override {
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+
+    // TODO this is not exactly true, but OK for my current purpose
+    if (!desc.mayLoad() && !desc.mayStore() && !desc.isMoveReg() && !desc.isMoveImmediate())
+      return true;
+
+    return false;
+  }
+
 private:
   llvm::MCRegisterInfo *mRI;
   llvm::MCAsmInfo *mAI;

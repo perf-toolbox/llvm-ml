@@ -51,6 +51,8 @@ struct NodeFeatures {
   bool isBarrier = false; ///< true if the instruction emits execution barrier
   bool isAtomic = false;  ///< true if instruction is an atomic instruction
   bool isVector = false;  ///< true if the instruction is a vector instruction
+  bool isCompute = false; ///< true if the instruction performs any kind of computation
+                          /// except for memory move
 
 private:
   friend class boost::serialization::access;
@@ -232,6 +234,7 @@ int main(int argc, char **argv) {
     features.isStore = mlTarget->isMemStore((*instructions)[i]);
     features.isBarrier = mlTarget->isBarrier((*instructions)[i]);
     features.isVector = mlTarget->isVector((*instructions)[i]);
+    features.isCompute = mlTarget->isCompute((*instructions)[i]);
 
     auto node = json::object();
     node["opcode"] = features.opcode;
@@ -239,6 +242,7 @@ int main(int argc, char **argv) {
     node["is_store"] = features.isStore;
     node["is_barrier"] = features.isBarrier;
     node["is_vector"] = features.isVector;
+    node["is_compute"] = features.isCompute;
     nodes.push_back(node);
 
     boost::put(boost::vertex_bundle, g, i, features);

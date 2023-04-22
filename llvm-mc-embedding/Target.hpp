@@ -29,6 +29,7 @@ public:
   virtual bool isBarrier(const llvm::MCInst &inst) = 0;
   virtual bool isVector(const llvm::MCInst &inst) = 0;
   virtual bool isAtomic(const llvm::MCInst &inst) = 0;
+  virtual bool isCompute(const llvm::MCInst &inst) = 0;
 };
 
 std::unique_ptr<Target> createX86Target(llvm::MCRegisterInfo *ri,
