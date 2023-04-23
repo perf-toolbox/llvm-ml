@@ -132,6 +132,25 @@ constexpr auto Prologue = R"(
   movq $$0x2324000, %r13 
   movq $$0x2324000, %r14 
   movq $$0x2324000, %r15 
+
+  pushq %rax
+  vbroadcastsd 40(%rsp), %ymm0
+  vbroadcastsd 40(%rsp), %ymm1
+  vbroadcastsd 40(%rsp), %ymm2
+  vbroadcastsd 40(%rsp), %ymm3
+  vbroadcastsd 40(%rsp), %ymm4
+  vbroadcastsd 40(%rsp), %ymm5
+  vbroadcastsd 40(%rsp), %ymm6
+  vbroadcastsd 40(%rsp), %ymm7
+  vbroadcastsd 40(%rsp), %ymm8
+  vbroadcastsd 40(%rsp), %ymm9
+  vbroadcastsd 40(%rsp), %ymm10
+  vbroadcastsd 40(%rsp), %ymm11
+  vbroadcastsd 40(%rsp), %ymm12
+  vbroadcastsd 40(%rsp), %ymm13
+  vbroadcastsd 40(%rsp), %ymm14
+  vbroadcastsd 40(%rsp), %ymm15
+  popq %rax
 )";
 
 constexpr auto Epilogue = R"(
