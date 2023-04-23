@@ -271,6 +271,7 @@ int main(int argc, char **argv) {
   json out;
   out["nodes"] = nodes;
   out["edges"] = edges;
+  out["source"] = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str(); 
   ofs << out.dump();
 
   ofs.close();
