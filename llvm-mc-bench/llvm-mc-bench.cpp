@@ -34,6 +34,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
+#include "Target.hpp"
 #include "benchmark.hpp"
 #include "counters.hpp"
 
@@ -47,14 +48,12 @@ constexpr auto kHarnessTemplate = R"(
       define void @bench(ptr noundef %ctrctx, ptr noundef %out) {
       entry:
         call void @counters_start(ptr noundef %ctrctx)
-        %before = call i64 @counters_cycles(ptr noundef %ctrctx)
 
         ; WORKLOAD
         call void @counters_stop(ptr noundef %ctrctx)
 
-        %after = call i64 @counters_cycles(ptr noundef %ctrctx)
+        %cycles = call i64 @counters_cycles(ptr noundef %ctrctx)
 
-        %cycles = sub i64 %after, %before
         store i64 %cycles, ptr %out, align 8
 
         ret void
@@ -63,15 +62,13 @@ constexpr auto kHarnessTemplate = R"(
       define void @baseline(ptr noundef %ctrctx, ptr noundef %out) {
       entry:
         call void @counters_start(ptr noundef %ctrctx)
-        %before = call i64 @counters_cycles(ptr noundef %ctrctx)
 
         ; NOISE 
 
         call void @counters_stop(ptr noundef %ctrctx)
 
-        %after = call i64 @counters_cycles(ptr noundef %ctrctx)
+        %cycles = call i64 @counters_cycles(ptr noundef %ctrctx)
 
-        %cycles = sub i64 %after, %before
         store i64 %cycles, ptr %out, align 8
 
         ret void
@@ -79,103 +76,6 @@ constexpr auto kHarnessTemplate = R"(
 
       attributes #1 = { nounwind }
     )";
-
-// TODO(Alex) I wonder if the same can be achieved by simply putting
-// all of the assembly basic blocks into their own function. Would this
-// make the code more portable and concise?
-constexpr auto Prologue = R"(
-  push %rax
-  push %rbx
-  push %rcx
-  push %rdx
-  push %rsi
-  push %rdi
-  push %r8
-  push %r9
-  push %r10
-  push %r11
-  push %r12
-  push %r13
-  push %r14
-  push %r15
-
-  movq %rbp, %rax
-  movq $$0x2325000, %rbx
-  movq %rax, (%rbx)
-
-  movq %rsp, %rax
-  movq %rax, 16(%rbx)
-
-  movq $$512, %rdi
-  movq $$0x2324000, %rbx
-  shr $$12, %rbx
-  shl $$12, %rbx
-
-  movq %rax, %rbp
-  add $$2048, %rbp
-  mov %rbp, %rsp
-  shr $$5, %rsp
-  shl $$5, %rsp
-  sub $$0x10, %rsp
-
-  movq $$0x2324000, %rax 
-  movq $$0x2324000, %rbx  
-  movq $$0x2324000, %rcx 
-  movq $$0x2324000, %rdx 
-  movq $$0x2324000, %rsi 
-  movq $$0x2324000, %rdi 
-  movq $$0x2324000, %r8  
-  movq $$0x2324000, %r9  
-  movq $$0x2324000, %r10 
-  movq $$0x2324000, %r11 
-  movq $$0x2324000, %r12 
-  movq $$0x2324000, %r13 
-  movq $$0x2324000, %r14 
-  movq $$0x2324000, %r15 
-
-  pushq %rax
-  vbroadcastsd 40(%rsp), %ymm0
-  vbroadcastsd 40(%rsp), %ymm1
-  vbroadcastsd 40(%rsp), %ymm2
-  vbroadcastsd 40(%rsp), %ymm3
-  vbroadcastsd 40(%rsp), %ymm4
-  vbroadcastsd 40(%rsp), %ymm5
-  vbroadcastsd 40(%rsp), %ymm6
-  vbroadcastsd 40(%rsp), %ymm7
-  vbroadcastsd 40(%rsp), %ymm8
-  vbroadcastsd 40(%rsp), %ymm9
-  vbroadcastsd 40(%rsp), %ymm10
-  vbroadcastsd 40(%rsp), %ymm11
-  vbroadcastsd 40(%rsp), %ymm12
-  vbroadcastsd 40(%rsp), %ymm13
-  vbroadcastsd 40(%rsp), %ymm14
-  vbroadcastsd 40(%rsp), %ymm15
-  popq %rax
-)";
-
-constexpr auto Epilogue = R"(
-  movq $$0x2325000, %rbx
-  movq (%rbx), %rax
-  movq %rax, %rbp
-
-  movq 16(%rbx), %rax
-  movq %rax, %rsp
-
-  pop %r15
-  pop %r14
-  pop %r13
-  pop %r12
-  pop %r11
-  pop %r10
-  pop %r9
-  pop %r8
-  pop %rdi
-  pop %rsi
-  pop %rdx
-  pop %rcx
-  pop %rbx
-  pop %rax
-)";
 
 static mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -260,6 +160,8 @@ int main(int argc, char **argv) {
 
   std::string microbenchAsm = (*buffer)->getBuffer().str();
 
+  auto mlTarget = llvm_ml::createX86Target();
+
   // Prepare asm string
   {
     size_t pos = 0;
@@ -278,14 +180,14 @@ int main(int argc, char **argv) {
   const auto buildInlineAsm = [&](bool addWorkload) {
     std::string inlineAsm = "call void asm sideeffect \"";
 
-    inlineAsm += Prologue;
+    inlineAsm += mlTarget->getPrologue();
 
     if (addWorkload) {
       for (int i = 0; i < NumRuns; i++) {
         inlineAsm += microbenchAsm;
       }
     }
-    inlineAsm += Epilogue;
+    inlineAsm += mlTarget->getEpilogue();
 
     inlineAsm += "\", \"\"() #1\n";
 
@@ -359,12 +261,18 @@ int main(int argc, char **argv) {
   ros << "  num_runs: " << NumRuns << "\n";
 
   size_t noise = 0;
-  const auto noiseCb = [&noise, &ros](size_t cycles) {
+  const auto noiseCb = [&noise, &ros](uint64_t cycles, uint64_t cacheMisses,
+                                      uint64_t contextSwitches) {
     noise = cycles;
     ros << "  noise: " << cycles << "\n";
+    ros << "  noise_cache_misses: " << cacheMisses << "\n";
+    ros << "  noise_context_switches: " << contextSwitches << "\n";
   };
-  const auto benchCb = [&noise, &ros](size_t cycles) {
+  const auto benchCb = [&noise, &ros](uint64_t cycles, uint64_t cacheMisses,
+                                      uint64_t contextSwitches) {
     ros << "  total_cycles: " << cycles << "\n";
+    ros << "  total_cache_misses: " << cacheMisses << "\n";
+    ros << "  total_context_switches: " << contextSwitches << "\n";
     ros << "  cycles: " << (cycles - noise) << "\n";
   };
 

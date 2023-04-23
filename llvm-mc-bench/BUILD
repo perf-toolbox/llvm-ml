@@ -4,6 +4,8 @@ cc_binary(
       "llvm-mc-bench.cpp",
       "counters.hpp",
       "benchmark.hpp",
+      "Target.hpp",
+      "Target/X86Target.cpp",
     ] + select({
       "@platforms//os:linux": [
         "counters_linux.cpp",

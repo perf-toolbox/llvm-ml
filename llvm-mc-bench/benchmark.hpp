@@ -13,7 +13,7 @@ class Error;
 
 namespace llvm_ml {
 using BenchmarkFn = void (*)(void *, void *);
-using BenchmarkCb = std::function<void(size_t)>;
+using BenchmarkCb = std::function<void(uint64_t, uint64_t, uint64_t)>;
 
 llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
                          int pinnedCPU);

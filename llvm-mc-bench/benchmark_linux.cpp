@@ -86,6 +86,9 @@ void map_and_restart() {
   }
 
   gBenchFn(gCont, gOut);
+  uint64_t *out = static_cast<size_t *>(gOut);
+  out[1] = llvm_ml::counters_context_switches(gCont);
+  out[2] = llvm_ml::counters_cache_misses(gCont);
   llvm_ml::counters_free(gCont);
   close(gSharedMem);
   _exit(0);
@@ -164,8 +167,12 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
         if (WEXITSTATUS(status) == 0) {
           void *outPtr = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED,
                               shmemFD, 4096 * 2);
-          size_t cycles = *static_cast<size_t *>(outPtr);
-          cb(cycles);
+          uint64_t *ptr = static_cast<uint64_t *>(outPtr);
+          uint64_t cycles = ptr[0];
+          uint64_t cacheMisses = ptr[1];
+          uint64_t contextSwitches = ptr[2];
+
+          cb(cycles, cacheMisses, contextSwitches);
           return llvm::Error::success();
         }
 
