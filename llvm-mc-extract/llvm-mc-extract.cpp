@@ -116,7 +116,7 @@ static void extractBasicBlocks(const object::ObjectFile &object,
 
   const auto isBlockTerminator = [&](const MCInst &inst) {
     const MCInstrDesc &desc = mcii->get(inst.getOpcode());
-    return desc.isBranch() || desc.isReturn();
+    return desc.isTerminator() || desc.isCall();
   };
 
   uint64_t blockCounter = 0;
@@ -179,9 +179,6 @@ static void extractBasicBlocks(const object::ObjectFile &object,
         break;
       }
     }
-
-    blockCounter++;
-    os->close();
   }
 }
 
