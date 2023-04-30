@@ -18,7 +18,7 @@ build --per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 
 build:debug --strip=never
-build:debug -g
+build:debug --cxxopt=-g --copt=-g
 
 # Include user defines
 # It's a good practice to put something like 

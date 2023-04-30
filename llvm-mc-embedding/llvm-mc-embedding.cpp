@@ -33,13 +33,15 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
-#include <boost/archive/text_oarchive.hpp>
 #include <boost/graph/adj_list_serialize.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graphviz.hpp>
 #include <nlohmann/json.hpp>
 
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <sstream>
 
 using json = nlohmann::json;
 
@@ -53,6 +55,16 @@ struct NodeFeatures {
   bool isVector = false;  ///< true if the instruction is a vector instruction
   bool isCompute = false; ///< true if the instruction performs any kind of computation
                           /// except for memory move
+  bool isVirtualRoot = false;
+
+  std::vector<int8_t>
+  get_one_hot_embeddings(const std::map<unsigned, size_t> &map) const {
+    std::vector<int8_t> vec;
+    vec.resize(map.size());
+    if (!isVirtualRoot)
+      vec[map.at(opcode)] = 1;
+    return vec;
+  }
 
 private:
   friend class boost::serialization::access;
@@ -62,6 +74,87 @@ private:
     ar &opcode;
   }
 };
+
+struct EdgeFeatures {
+private:
+  friend class boost::serialization::access;
+
+  template <class Archive>
+  void serialize(Archive &ar, const unsigned int /* version */) {}
+};
+
+struct GraphProperties {
+  size_t numOpcodes;
+  std::string source;
+
+private:
+  friend class boost::serialization::access;
+
+  template <class Archive>
+  void serialize(Archive &ar, const unsigned int /* version */) {
+    ar &numOpcodes;
+    ar &source;
+  }
+};
+
+using Graph =
+    boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
+                          NodeFeatures, EdgeFeatures, GraphProperties>;
+
+static void exportReadableJSON(const Graph &g, const std::string &source,
+                               llvm::raw_ostream &os) {
+  auto nodes = json::array();
+
+  for (auto vd : boost::make_iterator_range(vertices(g))) {
+    const auto &n = g[vd];
+    json node;
+    node["is_load"] = n.isLoad;
+    node["is_store"] = n.isStore;
+    node["is_barrier"] = n.isBarrier;
+    node["is_atomic"] = n.isAtomic;
+    node["is_vector"] = n.isVector;
+    node["is_compute"] = n.isCompute;
+    node["opcode"] = n.opcode;
+    nodes.push_back(node);
+  }
+
+  auto edges = json::array();
+  for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
+    auto edge = json({boost::source(e, g), boost::target(e, g)});
+    edges.push_back(edge);
+  }
+
+  json out;
+  out["nodes"] = nodes;
+  out["edges"] = edges;
+  out["source"] = boost::get_property(g, &GraphProperties::source);
+  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
+
+  os << out.dump(4);
+}
+
+static void exportJSON(const Graph &g, const std::string &source,
+                       const std::map<unsigned, size_t> &map,
+                       llvm::raw_ostream &os) {
+  auto nodes = json::array();
+  for (auto vd : boost::make_iterator_range(vertices(g))) {
+    const auto &n = g[vd];
+    nodes.push_back(n.get_one_hot_embeddings(map));
+  }
+
+  auto edges = json::array();
+  for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
+    auto edge = json({boost::source(e, g), boost::target(e, g)});
+    edges.push_back(edge);
+  }
+
+  json out;
+  out["nodes"] = nodes;
+  out["edges"] = edges;
+  out["source"] = source;
+
+  os << out.dump();
+}
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -79,6 +172,19 @@ static llvm::cl::opt<std::string>
 static llvm::cl::opt<std::string>
     TripleName("triple", llvm::cl::desc("Target triple to assemble for, "
                                         "see -version for available targets"));
+
+static llvm::cl::opt<bool>
+    ReadableJSON("readable-json",
+                 llvm::cl::desc("Export features as readable JSON format"));
+static llvm::cl::opt<bool> Dot("dot",
+                               llvm::cl::desc("Visualize graph in DOT format"));
+static llvm::cl::opt<bool> VirtualRoot(
+    "virtual-root",
+    llvm::cl::desc(
+        "Add virtual root node and connect all other nodes with it"));
+static llvm::cl::opt<bool>
+    InOrder("in-order",
+            llvm::cl::desc("Connect nodes sequentially to form a path"));
 
 static const llvm::Target *getTarget(const char *ProgName) {
   // Figure out the target triple.
@@ -162,6 +268,24 @@ parseAssembly(llvm::SourceMgr &srcMgr, const llvm::MCInstrInfo &mcii,
   return instructions;
 }
 
+static std::map<unsigned, size_t> getOpcodeMap(llvm::MCInstrInfo &mcii) {
+  size_t opcodeId = 0;
+  std::map<unsigned, size_t> map;
+
+  for (unsigned opcode = 0; opcode < mcii.getNumOpcodes(); opcode++) {
+    const llvm::MCInstrDesc &desc = mcii.get(opcode);
+
+    if (desc.isPseudo()) {
+      continue;
+    }
+
+    map[opcode] = opcodeId;
+    opcodeId++;
+  }
+
+  return map;
+}
+
 int main(int argc, char **argv) {
   llvm::InitLLVM X(argc, argv);
 
@@ -218,13 +342,17 @@ int main(int argc, char **argv) {
   auto mlTarget =
       llvm_ml::createX86Target(mcri.get(), mcai.get(), msti.get(), mcii.get());
 
-  using Graph = boost::adjacency_list<boost::vecS, boost::vecS,
-                                      boost::directedS, NodeFeatures>;
+  auto map = getOpcodeMap(*mcii);
 
-  Graph g(instructions->size());
+  Graph g(instructions->size() + static_cast<size_t>(VirtualRoot == true));
 
-  auto nodes = json::array();
-  auto edges = json::array();
+  if (VirtualRoot) {
+    NodeFeatures features;
+    features.isVirtualRoot = true;
+    features.opcode = 0;
+
+    boost::put(boost::vertex_bundle, g, 0, features);
+  }
 
   for (size_t i = 0; i < instructions->size(); i++) {
     // Extract the opcode of the instruction and add it as a node feature
@@ -236,16 +364,15 @@ int main(int argc, char **argv) {
     features.isVector = mlTarget->isVector((*instructions)[i]);
     features.isCompute = mlTarget->isCompute((*instructions)[i]);
 
-    auto node = json::object();
-    node["opcode"] = features.opcode;
-    node["is_load"] = features.isLoad;
-    node["is_store"] = features.isStore;
-    node["is_barrier"] = features.isBarrier;
-    node["is_vector"] = features.isVector;
-    node["is_compute"] = features.isCompute;
-    nodes.push_back(node);
+    size_t idx = i + static_cast<size_t>(VirtualRoot == true);
 
-    boost::put(boost::vertex_bundle, g, i, features);
+    boost::put(boost::vertex_bundle, g, idx, features);
+    if ((i > 0) && InOrder) {
+      boost::add_edge(idx - 1, idx, g);
+    }
+    if (VirtualRoot) {
+      boost::add_edge(0, idx, g);
+    }
   }
 
   std::unordered_map<unsigned, size_t> lastWrite;
@@ -257,8 +384,6 @@ int main(int argc, char **argv) {
     for (unsigned reg : readRegs) {
       if (lastWrite.count(reg)) {
         boost::add_edge(lastWrite.at(reg), i, g);
-        auto edge = json({lastWrite.at(reg), i});
-        edges.push_back(edge);
       }
     }
 
@@ -267,12 +392,24 @@ int main(int argc, char **argv) {
     }
   }
 
-  std::ofstream ofs(OutputFilename.c_str());
-  json out;
-  out["nodes"] = nodes;
-  out["edges"] = edges;
-  out["source"] = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str(); 
-  ofs << out.dump();
+  std::error_code ec;
+  llvm::raw_fd_ostream ofs(OutputFilename, ec);
+
+  std::string source =
+      sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str();
+  if (ReadableJSON) {
+    exportReadableJSON(g, source, ofs);
+  } else if (Dot) {
+    std::string dot;
+    std::stringstream os{dot};
+    boost::dynamic_properties dp;
+    dp.property("label", get(&NodeFeatures::opcode, g));
+    boost::write_graphviz_dp(os, g, dp);
+    os.flush();
+    ofs << dot;
+  } else {
+    exportJSON(g, source, map, ofs);
+  }
 
   ofs.close();
 
