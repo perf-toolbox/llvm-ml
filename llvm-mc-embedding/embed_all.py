@@ -58,7 +58,7 @@ def process_block(input):
 
 
 if args.progress:
-    import tqdm
+    from tqdm import tqdm
     for b in tqdm(blocks):
         process_block(b)
 else:
