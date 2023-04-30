@@ -34,7 +34,7 @@ def process_block(input):
 
         out_filename = input.replace(".s", ".json")
 
-        if not args.triple.empty():
+        if not args.triple is None:
             tool_args.append("--triple")
             tool_args.append(args.triple)
         if args.dot:
