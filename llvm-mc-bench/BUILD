@@ -19,6 +19,7 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
+      "@nlohmann_json//:json",
     ]
 )
 

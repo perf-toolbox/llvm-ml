@@ -38,7 +38,10 @@
 #include "benchmark.hpp"
 #include "counters.hpp"
 
+#include <nlohmann/json.hpp>
+
 using namespace llvm;
+using json = nlohmann::json;
 
 constexpr auto kHarnessTemplate = R"(
       declare void @counters_start(ptr noundef)
@@ -255,25 +258,26 @@ int main(int argc, char **argv) {
   llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
   llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  std::string result;
-  raw_string_ostream ros{result};
-  ros << "results:\n";
-  ros << "  num_runs: " << NumRuns << "\n";
+  json result;
 
   size_t noise = 0;
-  const auto noiseCb = [&noise, &ros](uint64_t cycles, uint64_t cacheMisses,
-                                      uint64_t contextSwitches) {
+  const auto noiseCb = [&noise, &result](uint64_t cycles, uint64_t cacheMisses,
+                                         uint64_t contextSwitches) {
     noise = cycles;
-    ros << "  noise: " << cycles << "\n";
-    ros << "  noise_cache_misses: " << cacheMisses << "\n";
-    ros << "  noise_context_switches: " << contextSwitches << "\n";
+    result["noise"] = noise;
+    result["noise_cache_misses"] = cacheMisses;
+    result["noise_context_switches"] = contextSwitches;
   };
-  const auto benchCb = [&noise, &ros](uint64_t cycles, uint64_t cacheMisses,
-                                      uint64_t contextSwitches) {
-    ros << "  total_cycles: " << cycles << "\n";
-    ros << "  total_cache_misses: " << cacheMisses << "\n";
-    ros << "  total_context_switches: " << contextSwitches << "\n";
-    ros << "  cycles: " << (cycles - noise) << "\n";
+  const auto benchCb = [&noise, &result](uint64_t cycles, uint64_t cacheMisses,
+                                         uint64_t contextSwitches) {
+    result["total_cycles"] = cycles;
+    result["total_cache_misses"] = cacheMisses;
+    result["total_context_switches"] = contextSwitches;
+    if (cycles > noise) {
+      result["cycles"] = cycles - noise;
+    } else {
+      result["cycles"] = 0;
+    }
   };
 
   auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
@@ -287,11 +291,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  ros.flush();
-
   std::error_code errorCode;
   raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
-  outfile << result;
+  outfile << result.dump();
   outfile.close();
 
   return 0;
