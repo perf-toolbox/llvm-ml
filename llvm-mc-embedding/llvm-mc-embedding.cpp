@@ -85,6 +85,7 @@ private:
 
 struct GraphProperties {
   size_t numOpcodes;
+  bool hasVirtualRoot;
   std::string source;
 
 private:
@@ -109,18 +110,24 @@ static json getMetaFeatures(const NodeFeatures &n) {
   node["is_atomic"] = n.isAtomic;
   node["is_vector"] = n.isVector;
   node["is_compute"] = n.isCompute;
+  node["opcode"] = n.opcode;
 
   return node;
 }
 
-static void exportReadableJSON(const Graph &g, const std::string &source,
-                               llvm::raw_ostream &os) {
+static void storeGraphIntoJSON(json &out, const Graph &g) {
+  out["source"] = boost::get_property(g, &GraphProperties::source);
+  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
+  out["has_virtual_root"] =
+      boost::get_property(g, &GraphProperties::hasVirtualRoot);
+}
+
+static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
   auto nodes = json::array();
 
   for (auto vd : boost::make_iterator_range(vertices(g))) {
     const auto &n = g[vd];
     json node = getMetaFeatures(n);
-    node["opcode"] = n.opcode;
     nodes.push_back(node);
   }
 
@@ -133,14 +140,12 @@ static void exportReadableJSON(const Graph &g, const std::string &source,
   json out;
   out["nodes"] = nodes;
   out["edges"] = edges;
-  out["source"] = boost::get_property(g, &GraphProperties::source);
-  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
+  storeGraphIntoJSON(out, g);
 
   os << out.dump(4);
 }
 
-static void exportJSON(const Graph &g, const std::string &source,
-                       const std::map<unsigned, size_t> &map,
+static void exportJSON(const Graph &g, const std::map<unsigned, size_t> &map,
                        llvm::raw_ostream &os) {
   auto nodes = json::array();
   auto nodes_meta = json::array();
@@ -162,8 +167,7 @@ static void exportJSON(const Graph &g, const std::string &source,
   out["nodes"] = nodes;
   out["meta"] = nodes_meta;
   out["edges"] = edges;
-  out["source"] = source;
-  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
+  storeGraphIntoJSON(out, g);
 
   os << out.dump();
 }
@@ -355,7 +359,14 @@ int main(int argc, char **argv) {
 
   auto map = getOpcodeMap(*mcii);
 
-  Graph g(instructions->size() + static_cast<size_t>(VirtualRoot == true));
+  std::string source =
+      sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str();
+  GraphProperties gp;
+  gp.source = std::move(source);
+  gp.hasVirtualRoot = VirtualRoot;
+  gp.numOpcodes = map.size();
+
+  Graph g(instructions->size() + static_cast<size_t>(VirtualRoot == true), gp);
 
   if (VirtualRoot) {
     NodeFeatures features;
@@ -410,10 +421,8 @@ int main(int argc, char **argv) {
   std::error_code ec;
   llvm::raw_fd_ostream ofs(OutputFilename, ec);
 
-  std::string source =
-      sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str();
   if (ReadableJSON) {
-    exportReadableJSON(g, source, ofs);
+    exportReadableJSON(g, ofs);
   } else if (Dot) {
     std::ostringstream os;
     boost::dynamic_properties dp;
@@ -423,7 +432,7 @@ int main(int argc, char **argv) {
     os.flush();
     ofs << os.str();
   } else {
-    exportJSON(g, source, map, ofs);
+    exportJSON(g, map, ofs);
   }
 
   ofs.close();
