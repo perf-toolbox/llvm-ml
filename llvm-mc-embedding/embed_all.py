@@ -4,12 +4,15 @@ import sys
 import os
 import subprocess
 import argparse
+import multiprocessing
+import concurrent.futures
 
 parser = argparse.ArgumentParser(
             prog="Basic block to graph embeddings converter"
         )
 parser.add_argument("input")
 parser.add_argument("output")
+parser.add_argument("--jobs", default=multiprocessing.cpu_count(),  type=int) 
 parser.add_argument("--triple", type=str) 
 parser.add_argument("--readable-json", action="store_true")
 parser.add_argument("--dot", action="store_true")
@@ -57,10 +60,21 @@ def process_block(input):
         print(err)
 
 
+print(f"Running in {args.jobs} threads")
+
+blocks_iter = iter(blocks)
+
 if args.progress:
-    from tqdm import tqdm
-    for b in tqdm(blocks):
-        process_block(b)
-else:
-    for b in blocks:
-        process_block(b)
+    from tqdm.auto import tqdm
+    blocks_iter = tqdm(blocks)
+
+futures = []
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+    for b in blocks_iter:
+        futures.append(executor.submit(process_block, b))
+
+        if len(futures) % args.jobs == 0:
+            concurrent.futures.wait(futures)
+
+            futures = []
