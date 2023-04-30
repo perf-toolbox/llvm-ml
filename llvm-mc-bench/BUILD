@@ -4,8 +4,6 @@ cc_binary(
       "llvm-mc-bench.cpp",
       "counters.hpp",
       "benchmark.hpp",
-      "Target.hpp",
-      "Target/X86Target.cpp",
     ] + select({
       "@platforms//os:linux": [
         "counters_linux.cpp",
@@ -20,6 +18,7 @@ cc_binary(
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
+      "@//target:target"
     ]
 )
 

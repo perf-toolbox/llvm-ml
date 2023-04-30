@@ -34,9 +34,9 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
-#include "Target.hpp"
 #include "benchmark.hpp"
 #include "counters.hpp"
+#include "target/Target.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
 
   std::string microbenchAsm = (*buffer)->getBuffer().str();
 
-  auto mlTarget = llvm_ml::createX86Target();
+  auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
 
   // Prepare asm string
   {
@@ -183,14 +183,14 @@ int main(int argc, char **argv) {
   const auto buildInlineAsm = [&](bool addWorkload) {
     std::string inlineAsm = "call void asm sideeffect \"";
 
-    inlineAsm += mlTarget->getPrologue();
+    inlineAsm += mlTarget->getBenchPrologue();
 
     if (addWorkload) {
       for (int i = 0; i < NumRuns; i++) {
         inlineAsm += microbenchAsm;
       }
     }
-    inlineAsm += mlTarget->getEpilogue();
+    inlineAsm += mlTarget->getBenchEpilogue();
 
     inlineAsm += "\", \"\"() #1\n";
 

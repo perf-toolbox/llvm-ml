@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "Target.hpp"
-
+#include "target/Target.hpp"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -164,6 +163,7 @@ static void exportJSON(const Graph &g, const std::string &source,
   out["meta"] = nodes_meta;
   out["edges"] = edges;
   out["source"] = source;
+  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
 
   os << out.dump();
 }
@@ -351,8 +351,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  auto mlTarget =
-      llvm_ml::createX86Target(mcri.get(), mcai.get(), msti.get(), mcii.get());
+  auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
 
   auto map = getOpcodeMap(*mcii);
 
