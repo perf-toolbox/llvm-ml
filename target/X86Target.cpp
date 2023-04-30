@@ -175,13 +175,13 @@ public:
   }
 
   bool isVector(const llvm::MCInst &inst) override {
-    // TODO fix this method
-    return false;
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+    return (desc.TSFlags & llvm::X86II::XS) != 0;
   }
 
   bool isAtomic(const llvm::MCInst &inst) override {
-    // TODO fix this method
-    return false;
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+    return (desc.TSFlags & llvm::X86II::LOCK) != 0;
   }
 
   bool isCompute(const llvm::MCInst &inst) override {
@@ -203,6 +203,12 @@ public:
            opcode == llvm::X86::NOOP || opcode == llvm::X86::FNOP;
   }
 
+  bool isFloat(const llvm::MCInst &inst) override {
+    // TODO fix this method
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+
+    return (desc.TSFlags & llvm::X86II::NotFP) == 0;
+  }
 private:
   llvm::MCInstrInfo *mII;
 };

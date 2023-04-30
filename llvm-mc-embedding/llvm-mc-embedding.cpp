@@ -54,6 +54,7 @@ struct NodeFeatures {
   bool isVector = false;  ///< true if the instruction is a vector instruction
   bool isCompute = false; ///< true if the instruction performs any kind of computation
                           /// except for memory move
+  bool isFloat = false; ///< true if the instruction performs floating point computation
   bool isVirtualRoot = false;
   size_t nodeId = 0;
 
