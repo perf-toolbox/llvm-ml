@@ -93,6 +93,15 @@ void map_and_restart() {
   close(gSharedMem);
   _exit(0);
 }
+void restart_only() {
+  gBenchFn(gCont, gOut);
+  uint64_t *out = static_cast<size_t *>(gOut);
+  out[1] = llvm_ml::counters_context_switches(gCont);
+  out[2] = llvm_ml::counters_cache_misses(gCont);
+  llvm_ml::counters_free(gCont);
+  close(gSharedMem);
+  _exit(0);
+}
 }
 
 namespace llvm_ml {
@@ -171,6 +180,20 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
           uint64_t cycles = ptr[0];
           uint64_t cacheMisses = ptr[1];
           uint64_t contextSwitches = ptr[2];
+
+          // Try to eliminate as much noise as possible
+          if (cacheMisses != 0 && (i + 1 != MAX_FAULTS)) {
+            void *restartAddress = (void *)&restart_only;
+            restartChild(child, restartAddress);
+
+            continue;
+          }
+          if (contextSwitches != 0 && (i + 1 != MAX_FAULTS)) {
+            void *restartAddress = (void *)&restart_only;
+            restartChild(child, restartAddress);
+
+            continue;
+          }
 
           cb(cycles, cacheMisses, contextSwitches);
           return llvm::Error::success();
