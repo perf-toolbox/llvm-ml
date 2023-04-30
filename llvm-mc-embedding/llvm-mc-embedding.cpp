@@ -101,19 +101,25 @@ using Graph =
     boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
                           NodeFeatures, EdgeFeatures, GraphProperties>;
 
+static json getMetaFeatures(const NodeFeatures &n) {
+  json node;
+  node["is_load"] = n.isLoad;
+  node["is_store"] = n.isStore;
+  node["is_barrier"] = n.isBarrier;
+  node["is_atomic"] = n.isAtomic;
+  node["is_vector"] = n.isVector;
+  node["is_compute"] = n.isCompute;
+
+  return node;
+}
+
 static void exportReadableJSON(const Graph &g, const std::string &source,
                                llvm::raw_ostream &os) {
   auto nodes = json::array();
 
   for (auto vd : boost::make_iterator_range(vertices(g))) {
     const auto &n = g[vd];
-    json node;
-    node["is_load"] = n.isLoad;
-    node["is_store"] = n.isStore;
-    node["is_barrier"] = n.isBarrier;
-    node["is_atomic"] = n.isAtomic;
-    node["is_vector"] = n.isVector;
-    node["is_compute"] = n.isCompute;
+    json node = getMetaFeatures(n);
     node["opcode"] = n.opcode;
     nodes.push_back(node);
   }
@@ -137,9 +143,13 @@ static void exportJSON(const Graph &g, const std::string &source,
                        const std::map<unsigned, size_t> &map,
                        llvm::raw_ostream &os) {
   auto nodes = json::array();
+  auto nodes_meta = json::array();
   for (auto vd : boost::make_iterator_range(vertices(g))) {
     const auto &n = g[vd];
     nodes.push_back(n.get_one_hot_embeddings(map));
+
+    json meta = getMetaFeatures(n);
+    nodes_meta.push_back(meta);
   }
 
   auto edges = json::array();
@@ -150,6 +160,7 @@ static void exportJSON(const Graph &g, const std::string &source,
 
   json out;
   out["nodes"] = nodes;
+  out["meta"] = nodes_meta;
   out["edges"] = edges;
   out["source"] = source;
 
