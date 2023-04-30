@@ -8,6 +8,7 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsDisassemblers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
+      "@//target:target"
     ]
 )
 

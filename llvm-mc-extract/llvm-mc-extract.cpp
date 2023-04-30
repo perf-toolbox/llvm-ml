@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "target/Target.hpp"
+
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -99,6 +101,8 @@ static void extractBasicBlocks(const object::ObjectFile &object,
       target->createMCObjectFileInfo(context, false));
   context.setObjectFileInfo(mcofi.get());
 
+  auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
+
   std::unique_ptr<MCDisassembler> disasm(
       target->createMCDisassembler(*msti, context));
 
@@ -168,7 +172,7 @@ static void extractBasicBlocks(const object::ObjectFile &object,
             errs() << "Failed to create a file: " << EC.message();
             std::terminate();
           }
-        } else {
+        } else if (!mlTarget->isNop(inst)) {
           instPrinter->printInst(&inst, sectionAddress + index, "", *msti, *os);
           *os << "\n";
         }

@@ -10,6 +10,8 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
+#include "MCTargetDesc/X86BaseInfo.h"
+
 // TODO(Alex) I wonder if the same can be achieved by simply putting
 // all of the assembly basic blocks into their own function. Would this
 // make the code more portable and concise?
@@ -191,6 +193,14 @@ public:
       return true;
 
     return false;
+  }
+
+  bool isNop(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+    return opcode == llvm::X86::NOOPL || opcode == llvm::X86::NOOPLr ||
+           opcode == llvm::X86::NOOPWr || opcode == llvm::X86::NOOPW ||
+           opcode == llvm::X86::NOOPQr || opcode == llvm::X86::NOOPQ ||
+           opcode == llvm::X86::NOOP || opcode == llvm::X86::FNOP;
   }
 
 private:

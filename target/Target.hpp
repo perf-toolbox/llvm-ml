@@ -35,6 +35,7 @@ public:
   virtual bool isVector(const llvm::MCInst &inst) = 0;
   virtual bool isAtomic(const llvm::MCInst &inst) = 0;
   virtual bool isCompute(const llvm::MCInst &inst) = 0;
+  virtual bool isNop(const llvm::MCInst &inst) = 0;
 };
 
 std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,

@@ -12,5 +12,7 @@ cc_library(
       "@llvm-project//llvm:Support",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
+      "@llvm-project//llvm:X86CommonTableGen",
+      "@llvm-project//llvm:X86UtilsAndDesc",
     ]
 )
