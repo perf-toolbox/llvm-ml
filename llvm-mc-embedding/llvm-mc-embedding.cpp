@@ -56,6 +56,7 @@ struct NodeFeatures {
   bool isCompute = false; ///< true if the instruction performs any kind of computation
                           /// except for memory move
   bool isVirtualRoot = false;
+  size_t nodeId = 0;
 
   std::vector<int8_t>
   get_one_hot_embeddings(const std::map<unsigned, size_t> &map) const {
@@ -361,6 +362,7 @@ int main(int argc, char **argv) {
     NodeFeatures features;
     features.isVirtualRoot = true;
     features.opcode = 0;
+    features.nodeId = 0;
 
     boost::put(boost::vertex_bundle, g, 0, features);
   }
@@ -376,6 +378,8 @@ int main(int argc, char **argv) {
     features.isCompute = mlTarget->isCompute((*instructions)[i]);
 
     size_t idx = i + static_cast<size_t>(VirtualRoot == true);
+
+    features.nodeId = idx;
 
     boost::put(boost::vertex_bundle, g, idx, features);
     if ((i > 0) && InOrder) {
@@ -394,7 +398,8 @@ int main(int argc, char **argv) {
 
     for (unsigned reg : readRegs) {
       if (lastWrite.count(reg)) {
-        boost::add_edge(lastWrite.at(reg), i, g);
+        size_t offset = static_cast<size_t>(VirtualRoot == true);
+        boost::add_edge(lastWrite.at(reg) + offset, i + offset, g);
       }
     }
 
@@ -411,13 +416,13 @@ int main(int argc, char **argv) {
   if (ReadableJSON) {
     exportReadableJSON(g, source, ofs);
   } else if (Dot) {
-    std::string dot;
-    std::stringstream os{dot};
+    std::ostringstream os;
     boost::dynamic_properties dp;
     dp.property("label", get(&NodeFeatures::opcode, g));
+    dp.property("node_id", get(&NodeFeatures::nodeId, g));
     boost::write_graphviz_dp(os, g, dp);
     os.flush();
-    ofs << dot;
+    ofs << os.str();
   } else {
     exportJSON(g, source, map, ofs);
   }
