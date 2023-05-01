@@ -1,12 +1,14 @@
 cc_library(
     name = "target",
     srcs = [
-      "Target.cpp",
-      "X86Target.cpp",
+      "target/Target.cpp",
+      "target/X86Target.cpp",
     ],
     hdrs = [
-      "Target.hpp"
+      "target/Target.hpp"
     ],
+    #strip_include_prefix = "lib",
+    include_prefix = "llvm-ml",
     visibility = ["//visibility:public"],
     deps = [
       "@llvm-project//llvm:Support",
@@ -16,3 +18,4 @@ cc_library(
       "@llvm-project//llvm:X86UtilsAndDesc",
     ]
 )
+

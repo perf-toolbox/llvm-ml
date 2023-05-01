@@ -36,7 +36,7 @@
 
 #include "benchmark.hpp"
 #include "counters.hpp"
-#include "target/Target.hpp"
+#include "llvm-ml/target/Target.hpp"
 
 #include <nlohmann/json.hpp>
 
