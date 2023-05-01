@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "lib/structures/bb_graph.pb.h"
 #include "llvm-ml/target/Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
@@ -59,13 +60,10 @@ struct NodeFeatures {
   bool isVirtualRoot = false;
   size_t nodeId = 0;
 
-  std::vector<int8_t>
-  get_one_hot_embeddings(const std::map<unsigned, size_t> &map) const {
-    std::vector<int8_t> vec;
-    vec.resize(map.size());
-    if (!isVirtualRoot)
-      vec[map.at(opcode)] = 1;
-    return vec;
+  int64_t get_one_hot_embeddings(const std::map<unsigned, size_t> &map) const {
+    if (isVirtualRoot)
+      return -1;
+    return map.at(opcode);
   }
 
 private:
@@ -147,31 +145,38 @@ static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
   os << out.dump(4);
 }
 
-static void exportJSON(const Graph &g, const std::map<unsigned, size_t> &map,
+static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
                        llvm::raw_ostream &os) {
-  auto nodes = json::array();
-  auto nodes_meta = json::array();
+  llvm_ml::BBGraph graph;
+  graph.set_source(boost::get_property(g, &GraphProperties::source));
+  graph.set_num_opcodes(boost::get_property(g, &GraphProperties::numOpcodes));
+  graph.set_has_virtual_root(
+      boost::get_property(g, &GraphProperties::hasVirtualRoot));
+
   for (auto vd : boost::make_iterator_range(vertices(g))) {
     const auto &n = g[vd];
-    nodes.push_back(n.get_one_hot_embeddings(map));
-
-    json meta = getMetaFeatures(n);
-    nodes_meta.push_back(meta);
+    auto *pbNode = graph.add_nodes();
+    pbNode->set_is_load(n.isLoad);
+    pbNode->set_is_store(n.isStore);
+    pbNode->set_is_barrier(n.isBarrier);
+    pbNode->set_is_atomic(n.isAtomic);
+    pbNode->set_is_vector(n.isVector);
+    pbNode->set_is_compute(n.isCompute);
+    pbNode->set_opcode(n.opcode);
+    pbNode->set_onehot(n.get_one_hot_embeddings(map));
+    pbNode->set_is_virtual_root(n.isVirtualRoot);
+    pbNode->set_node_id(n.nodeId);
   }
 
-  auto edges = json::array();
   for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
-    auto edge = json({boost::source(e, g), boost::target(e, g)});
-    edges.push_back(edge);
+    auto *pbEdge = graph.add_edges();
+    pbEdge->set_from(boost::source(e, g));
+    pbEdge->set_to(boost::target(e, g));
   }
 
-  json out;
-  out["nodes"] = nodes;
-  out["meta"] = nodes_meta;
-  out["edges"] = edges;
-  storeGraphIntoJSON(out, g);
-
-  os << out.dump();
+  std::string serialized;
+  graph.SerializeToString(&serialized);
+  os << serialized;
 }
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
@@ -434,7 +439,7 @@ int main(int argc, char **argv) {
     os.flush();
     ofs << os.str();
   } else {
-    exportJSON(g, map, ofs);
+    exportPBuf(g, map, ofs);
   }
 
   ofs.close();

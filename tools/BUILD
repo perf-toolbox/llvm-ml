@@ -19,6 +19,7 @@ cc_binary(
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
       "@//lib:target",
+      "@//lib:cpp_structures_proto",
     ]
 )
 
@@ -32,7 +33,7 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsDisassemblers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
-      "@//lib:target"
+      "@//lib:target",
     ]
 )
 
@@ -49,5 +50,6 @@ cc_binary(
       "@boost//:graph",
       "@nlohmann_json//:json",
       "@//lib:target",
+      "@//lib:cpp_structures_proto",
     ]
 )

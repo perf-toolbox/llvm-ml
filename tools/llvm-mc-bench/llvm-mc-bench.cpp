@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "benchmark.hpp"
+#include "counters.hpp"
+#include "lib/structures/bb_metrics.pb.h"
+#include "llvm-ml/target/Target.hpp"
+
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/Module.h"
@@ -33,10 +38,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
-
-#include "benchmark.hpp"
-#include "counters.hpp"
-#include "llvm-ml/target/Target.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -94,6 +95,14 @@ static cl::opt<int>
     PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
               cl::init(0));
 
+static cl::opt<bool>
+    ReadableJSON("readable-json",
+                 cl::desc("export measurements to a JSON file"), cl::init(0));
+static cl::opt<bool>
+    IncludeSource("include-source",
+                  cl::desc("add source basic block to results file"),
+                  cl::init(0));
+
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
                               "see -version for available targets"));
@@ -101,6 +110,52 @@ static cl::opt<std::string>
 static cl::opt<std::string>
     TripleName("triple", cl::desc("Target triple to assemble for, "
                                   "see -version for available targets"));
+
+struct Measurement {
+  uint64_t cycles;
+  uint64_t cacheMisses;
+  uint64_t contextSwitches;
+};
+
+static void exportJSON(const Measurement &noise, const Measurement &workload,
+                       const std::string &source, llvm::raw_ostream &os) {
+  json res;
+  res["noise_cycles"] = noise.cycles;
+  res["noise_cache_misses"] = noise.cacheMisses;
+  res["noise_context_switches"] = noise.contextSwitches;
+  res["total_cycles"] = workload.cycles;
+  res["total_cache_misses"] = workload.cacheMisses;
+  res["total_context_switches"] = workload.contextSwitches;
+  if (noise.cycles < workload.cycles) {
+    res["measured_cycles"] = workload.cycles - noise.cycles;
+  } else {
+    res["measured_cycles"] = 0;
+  }
+  if (IncludeSource) {
+    res["source"] = source;
+  }
+
+  os << res.dump(4);
+}
+
+static void exportPBuf(const Measurement &noise, const Measurement &workload,
+                       const std::string &source, llvm::raw_ostream &os) {
+  llvm_ml::BBMetrics metrics;
+  metrics.set_noise_cycles(noise.cycles);
+  metrics.set_noise_cache_misses(noise.cacheMisses);
+  metrics.set_noise_context_switches(noise.contextSwitches);
+  metrics.set_total_cycles(workload.cycles);
+  metrics.set_total_cache_misses(workload.cacheMisses);
+  metrics.set_total_context_switches(workload.contextSwitches);
+  if (noise.cycles < workload.cycles) {
+    metrics.set_measured_cycles(workload.cycles - noise.cycles);
+  } else {
+    metrics.set_measured_cycles(0);
+  }
+  if (IncludeSource) {
+    metrics.set_source(source);
+  }
+}
 
 static const Target *getTarget() {
   // Figure out the target triple.
@@ -258,26 +313,20 @@ int main(int argc, char **argv) {
   llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
   llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  json result;
-
-  size_t noise = 0;
-  const auto noiseCb = [&noise, &result](uint64_t cycles, uint64_t cacheMisses,
-                                         uint64_t contextSwitches) {
-    noise = cycles;
-    result["noise"] = noise;
-    result["noise_cache_misses"] = cacheMisses;
-    result["noise_context_switches"] = contextSwitches;
+  Measurement noise;
+  const auto noiseCb = [&noise](uint64_t cycles, uint64_t cacheMisses,
+                                uint64_t contextSwitches) {
+    noise.cycles = cycles;
+    noise.contextSwitches = contextSwitches;
+    noise.cacheMisses = cacheMisses;
   };
-  const auto benchCb = [&noise, &result](uint64_t cycles, uint64_t cacheMisses,
-                                         uint64_t contextSwitches) {
-    result["total_cycles"] = cycles;
-    result["total_cache_misses"] = cacheMisses;
-    result["total_context_switches"] = contextSwitches;
-    if (cycles > noise) {
-      result["cycles"] = cycles - noise;
-    } else {
-      result["cycles"] = 0;
-    }
+
+  Measurement workload;
+  const auto benchCb = [&workload](uint64_t cycles, uint64_t cacheMisses,
+                                   uint64_t contextSwitches) {
+    workload.cycles = cycles;
+    workload.contextSwitches = contextSwitches;
+    workload.cacheMisses = cacheMisses;
   };
 
   auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
@@ -293,7 +342,11 @@ int main(int argc, char **argv) {
 
   std::error_code errorCode;
   raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
-  outfile << result.dump();
+  if (ReadableJSON) {
+    exportJSON(noise, workload, (*buffer)->getBuffer().str(), outfile);
+  } else {
+    exportPBuf(noise, workload, (*buffer)->getBuffer().str(), outfile);
+  }
   outfile.close();
 
   return 0;

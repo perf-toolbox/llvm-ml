@@ -26,6 +26,14 @@ http_archive(
     strip_prefix = "rules_boost-5729d34dcf595874f32b9f1aa1134db65fe78fda",
     sha256 = "bf488e4c472832a303d31ed20ea0ffdd8fa974654969b0c129b7c0ce4273f103",
 )
+http_archive(
+    name = "rules_proto",
+    sha256 = "dc3fb206a2cb3441b485eb1e423165b231235a1ea9b031b4433cf7bc1fa460dd",
+    strip_prefix = "rules_proto-5.3.0-21.7",
+    urls = [
+        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/5.3.0-21.7.tar.gz",
+    ],
+)
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
@@ -35,6 +43,13 @@ http_archive(
     url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/800b9cd260ce3878e94abb7d583a7c0865f7d967.tar.gz",
     strip_prefix = "bazel-compile-commands-extractor-800b9cd260ce3878e94abb7d583a7c0865f7d967",
     sha256 = "7f6ebb62298694d8cf3ecaed81b3bb48de559819ac1909d4055abdc8c0ae1000",
+)
+
+http_archive(
+    name = "rules_python",
+    sha256 = "94750828b18044533e98a129003b6a68001204038dc4749f40b195b24c38f49f",
+    strip_prefix = "rules_python-0.21.0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.21.0/rules_python-0.21.0.tar.gz",
 )
 
 git_repository(
@@ -49,6 +64,13 @@ bazel_skylib_workspace()
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
 
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+rules_proto_dependencies()
+rules_proto_toolchains()
+
+load("@rules_python//python:repositories.bzl", "py_repositories")
+
+py_repositories()
 # Hack for broken zstd support
 new_local_repository(
   name = "llvm_zstd",

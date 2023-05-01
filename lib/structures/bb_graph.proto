@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package llvm_ml;
+
+message Node {
+  uint32 node_id = 1;
+  uint32 opcode = 2;
+  int64 onehot = 3;
+  bool is_load = 4;
+  bool is_store = 5;
+  bool is_barrier = 6;
+  bool is_atomic = 7;
+  bool is_vector = 8;
+  bool is_compute = 9;
+  bool is_float = 10;
+  bool is_virtual_root = 11;
+}
+
+message Edge {
+  uint32 from = 1;
+  uint32 to = 2;
+}
+
+message BBGraph {
+  repeated Node nodes = 1;
+  repeated Edge edges = 2;
+  uint32 num_opcodes = 3;
+  bool has_virtual_root = 4;
+  string source = 5;
+}
