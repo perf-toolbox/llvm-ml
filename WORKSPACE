@@ -22,9 +22,9 @@ http_archive(
 http_archive(
     name = "com_github_nelhage_rules_boost",
 
-    url = "https://github.com/nelhage/rules_boost/archive/5729d34dcf595874f32b9f1aa1134db65fe78fda.tar.gz",
-    strip_prefix = "rules_boost-5729d34dcf595874f32b9f1aa1134db65fe78fda",
-    sha256 = "bf488e4c472832a303d31ed20ea0ffdd8fa974654969b0c129b7c0ce4273f103",
+    url = "https://github.com/nelhage/rules_boost/archive/986d23f0fac5e331e54941dfecc1aa3a9a86e543.tar.gz",
+    strip_prefix = "rules_boost-986d23f0fac5e331e54941dfecc1aa3a9a86e543",
+    sha256 = "4d663a55f42fc16517b37d9af116413606fef0d970441217e9eeba0ab941a61f",
 )
 http_archive(
     name = "rules_proto",

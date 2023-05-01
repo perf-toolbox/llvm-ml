@@ -4,8 +4,8 @@ import os
 
 def create_task(basic_block, out_dir, cpu_num, retry):
     out_name = os.path.basename(basic_block)
-    out_path = os.path.join(out_dir, out_name + ".json")
-    handle = subprocess.Popen(["./bazel-bin/llvm-mc-bench/llvm-mc-bench", basic_block, "-o", out_path, "-c", str(cpu_num), "-n", "1000"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out_path = os.path.join(out_dir, out_name + ".pb")
+    handle = subprocess.Popen(["./bazel-bin/tools/llvm-mc-bench", basic_block, "-o", out_path, "-c", str(cpu_num), "-n", "1000"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     task = {}
     task["proc"] = handle
     task["basic_block"] = basic_block

@@ -37,6 +37,10 @@
 #include <boost/graph/adj_list_serialize.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graphviz.hpp>
+#include <boost/thread/executors/basic_thread_pool.hpp>
+#include <boost/thread/future.hpp>
+#include <filesystem>
+#include <indicators/indicators.hpp>
 #include <nlohmann/json.hpp>
 
 #include <fstream>
@@ -44,6 +48,7 @@
 #include <map>
 #include <sstream>
 
+namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 struct NodeFeatures {
@@ -54,9 +59,11 @@ struct NodeFeatures {
   bool isBarrier = false; ///< true if the instruction emits execution barrier
   bool isAtomic = false;  ///< true if instruction is an atomic instruction
   bool isVector = false;  ///< true if the instruction is a vector instruction
-  bool isCompute = false; ///< true if the instruction performs any kind of computation
-                          /// except for memory move
-  bool isFloat = false; ///< true if the instruction performs floating point computation
+  bool isCompute =
+      false; ///< true if the instruction performs any kind of computation
+             /// except for memory move
+  bool isFloat =
+      false; ///< true if the instruction performs floating point computation
   bool isVirtualRoot = false;
   size_t nodeId = 0;
 
@@ -182,11 +189,10 @@ static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
 
 static llvm::cl::opt<std::string> InputFilename(llvm::cl::Positional,
-                                                llvm::cl::desc("<input file>"),
-                                                llvm::cl::init("-"));
+                                                llvm::cl::desc("<input file>"));
 
-static llvm::cl::opt<std::string>
-    OutputFilename("o", llvm::cl::desc("output file"), llvm::cl::init("-"));
+static llvm::cl::opt<std::string> OutputFilename("o",
+                                                 llvm::cl::desc("output file"));
 
 static llvm::cl::opt<std::string>
     ArchName("arch", llvm::cl::desc("Target arch to assemble for, "
@@ -208,6 +214,9 @@ static llvm::cl::opt<bool> VirtualRoot(
 static llvm::cl::opt<bool>
     InOrder("in-order",
             llvm::cl::desc("Connect nodes sequentially to form a path"));
+static llvm::cl::opt<int>
+    Jobs("j", llvm::cl::desc("num threads (only makes sense in batch mode)"),
+         llvm::cl::init(0));
 
 static const llvm::Target *getTarget(const char *ProgName) {
   // Figure out the target triple.
@@ -309,29 +318,15 @@ static std::map<unsigned, size_t> getOpcodeMap(llvm::MCInstrInfo &mcii) {
   return map;
 }
 
-int main(int argc, char **argv) {
-  llvm::InitLLVM X(argc, argv);
-
-  // Initialize targets and assembly printers/parsers.
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmParsers();
-
-  llvm::cl::ParseCommandLineOptions(argc, argv,
-                                    "convert assembly to ML embeddings\n");
-
+static llvm::Error processSingleInput(fs::path input, fs::path output,
+                                      llvm::Triple triple) {
+  // FIXME(Alex): this is potentially not thread safe
   const llvm::Target *target = getTarget("");
 
-  if (!target)
-    return 1;
-  // Now that getTarget() has (potentially) replaced TripleName, it's safe to
-  // construct the Triple object.
-  llvm::Triple triple(TripleName);
-
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> buffer =
-      llvm::MemoryBuffer::getFileOrSTDIN(InputFilename, /*IsText=*/true);
+      llvm::MemoryBuffer::getFileOrSTDIN(input.c_str(), /*IsText=*/true);
   if (std::error_code EC = buffer.getError()) {
-    return 1;
+    return llvm::createStringError(EC, "Failed to open the file");
   }
 
   const llvm::MCTargetOptions options =
@@ -359,7 +354,7 @@ int main(int argc, char **argv) {
                                     context, target, triple, options);
 
   if (!instructions) {
-    return 1;
+    return instructions.takeError();
   }
 
   auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
@@ -426,7 +421,7 @@ int main(int argc, char **argv) {
   }
 
   std::error_code ec;
-  llvm::raw_fd_ostream ofs(OutputFilename, ec);
+  llvm::raw_fd_ostream ofs(output.c_str(), ec);
 
   if (ReadableJSON) {
     exportReadableJSON(g, ofs);
@@ -443,6 +438,133 @@ int main(int argc, char **argv) {
   }
 
   ofs.close();
+
+  return llvm::Error::success();
+}
+
+int main(int argc, char **argv) {
+  llvm::InitLLVM X(argc, argv);
+
+  // Initialize targets and assembly printers/parsers.
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+
+  llvm::cl::ParseCommandLineOptions(argc, argv,
+                                    "convert assembly to ML embeddings\n");
+
+  const llvm::Target *target = getTarget("");
+
+  if (!target)
+    return 1;
+  // Now that getTarget() has (potentially) replaced TripleName, it's safe to
+  // construct the Triple object.
+  llvm::Triple triple(TripleName);
+
+  fs::path input{InputFilename.c_str()};
+  fs::path output{OutputFilename.c_str()};
+  if (fs::is_directory(input) && fs::is_directory(output)) {
+    using namespace indicators;
+    indicators::show_console_cursor(false);
+
+    unsigned int numThreads = boost::thread::hardware_concurrency();
+    if (Jobs != 0)
+      numThreads = Jobs;
+
+    boost::executors::basic_thread_pool pool{numThreads};
+
+    IndeterminateProgressBar spinner{
+        option::BarWidth{40},
+        option::Start{"["},
+        option::Fill{"·"},
+        option::Lead{"<==>"},
+        option::End{"]"},
+        option::PostfixText{"Collecting files..."},
+        option::ForegroundColor{indicators::Color::yellow},
+        option::FontStyles{
+            std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
+
+    auto filenames = boost::async(pool, [&spinner, &input]() {
+      std::vector<fs::path> files;
+      // This is a very big vector, but the datasets tend to be no smaller
+      files.reserve(30'000'000);
+
+      for (const auto &entry : fs::directory_iterator(input)) {
+        auto path = entry.path();
+        if (!fs::is_regular_file(path) || path.extension() != ".s")
+          continue;
+
+        files.push_back(path);
+      }
+
+      spinner.mark_as_completed();
+
+      return files;
+    });
+
+    while (!spinner.is_completed()) {
+      spinner.tick();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    filenames.wait();
+    const std::vector<fs::path> &files = filenames.get();
+
+    spinner.set_option(option::ForegroundColor{Color::green});
+    spinner.set_option(option::PrefixText{"✔"});
+    spinner.set_option(option::PostfixText{"Complete!"});
+
+    std::vector<boost::future<llvm::Error>> dispatchedTasks;
+    dispatchedTasks.reserve(numThreads);
+
+    BlockProgressBar bar{
+        option::BarWidth{80}, option::ForegroundColor{Color::green},
+        option::FontStyles{std::vector<FontStyle>{FontStyle::bold}},
+        option::MaxProgress{files.size()}};
+
+    llvm::errs() << "Running in " << numThreads << " threads...\n";
+    for (const auto &path : files) {
+      fs::path outFile = output / path.filename();
+      if (ReadableJSON) {
+        outFile.replace_extension("json");
+      } else if (Dot) {
+        outFile.replace_extension("dot");
+      } else {
+        outFile.replace_extension("pb");
+      }
+
+      auto future = boost::async(pool, &processSingleInput, std::move(path),
+                                 std::move(outFile), triple);
+      dispatchedTasks.push_back(std::move(future));
+
+      if (dispatchedTasks.size() == numThreads) {
+        boost::wait_for_all(dispatchedTasks.begin(), dispatchedTasks.end());
+
+        for (auto &f : dispatchedTasks) {
+          auto err = f.get();
+          if (err) {
+            llvm::errs() << err << "\n";
+          }
+        }
+
+        dispatchedTasks.clear();
+      }
+
+      bar.tick();
+    }
+
+    indicators::show_console_cursor(true);
+  } else if (fs::is_regular_file(input) && !fs::is_regular_file(output)) {
+    auto err = processSingleInput(input, output, triple);
+    if (err) {
+      llvm::errs() << err << "\n";
+      return 1;
+    }
+  } else {
+    llvm::errs() << "Both input and output must either be directories (batch "
+                    "mode) or files\n";
+    return 1;
+  }
 
   return 0;
 }

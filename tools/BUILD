@@ -42,14 +42,22 @@ cc_binary(
     srcs = [
       "llvm-mc-embedding/llvm-mc-embedding.cpp",
     ],
+    defines = [
+      "BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION=1",
+      "BOOST_THREAD_PROVIDES_EXECUTORS",
+      "BOOST_THREAD_PROVIDES_FUTURE",
+      "BOOST_THREAD_USES_MOVE",
+    ],
     deps = [
       "@llvm-project//llvm:Support",
       "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@boost//:graph",
+      "@boost//:thread",
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",
+      "@//third_party:indicators",
     ]
 )
