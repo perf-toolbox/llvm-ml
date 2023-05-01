@@ -34,6 +34,7 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@//lib:target",
+      "@//third_party:indicators",
     ]
 )
 

@@ -36,6 +36,8 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
+#include <indicators/indicators.hpp>
+
 using namespace llvm;
 
 static cl::opt<std::string> InputFilename(cl::Positional,
@@ -125,6 +127,26 @@ static void extractBasicBlocks(const object::ObjectFile &object,
 
   uint64_t blockCounter = 0;
 
+  std::vector<std::unique_ptr<indicators::BlockProgressBar>> owningBars;
+  indicators::DynamicProgress<indicators::BlockProgressBar> bars;
+  for (const auto &s : llvm::enumerate(object.sections())) {
+    if (s.value().getSize() == 0)
+      continue;
+
+    using namespace indicators;
+    owningBars.emplace_back(new indicators::BlockProgressBar{
+        option::BarWidth{80}, option::ForegroundColor{Color::green},
+        option::FontStyles{
+            std::vector<indicators::FontStyle>{indicators::FontStyle::bold}},
+        option::MaxProgress{s.value().getSize()},
+        option::PrefixText{"Section " + std::to_string(s.index())}});
+
+    bars.push_back(*owningBars.back());
+  }
+
+  bars.set_option(indicators::option::HideBarWhenComplete{false});
+
+  size_t curSection = 0;
   for (const auto &section : object.sections()) {
     if (!section.isText() || section.isVirtual())
       continue;
@@ -157,6 +179,8 @@ static void extractBasicBlocks(const object::ObjectFile &object,
       std::terminate();
     }
 
+    indicators::show_console_cursor(false);
+
     uint64_t index = 0;
     while (index < sectionSize) {
       MCInst inst;
@@ -182,7 +206,16 @@ static void extractBasicBlocks(const object::ObjectFile &object,
         errs() << "Failed to parse block\n";
         break;
       }
+
+      bars[curSection].set_option(indicators::option::PostfixText{
+          std::to_string(index) + "/" + std::to_string(sectionSize)});
+      bars[curSection].set_progress(static_cast<float>(index) * 100.f /
+                                    static_cast<float>(sectionSize));
     }
+    bars[curSection].set_progress(100);
+    bars[curSection].mark_as_completed();
+    curSection++;
+    indicators::show_console_cursor(true);
   }
 }
 
