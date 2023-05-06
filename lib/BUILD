@@ -7,6 +7,7 @@ proto_library(
     srcs = [
         "structures/bb_graph.proto",
         "structures/bb_metrics.proto",
+        "structures/mc_dataset.proto",
     ]
 )
 

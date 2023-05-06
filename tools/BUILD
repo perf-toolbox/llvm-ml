@@ -62,3 +62,14 @@ cc_binary(
       "@//third_party:indicators",
     ]
 )
+
+cc_binary(
+    name = "llvm-mc-dataset",
+    srcs = [
+      "llvm-mc-dataset/llvm-mc-dataset.cpp",
+    ],
+    deps = [
+      "@llvm-project//llvm:Support",
+      "@//lib:cpp_structures_proto",
+    ]
+)
