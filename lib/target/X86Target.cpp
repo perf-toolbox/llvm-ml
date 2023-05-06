@@ -31,7 +31,8 @@ constexpr auto PrologueX64 = R"(
   push %r14
   push %r15
 
-  movq %rbp, %rax movq $$0x2325000, %rbx
+  movq %rbp, %rax
+  movq $$0x2325000, %rbx
   movq %rax, (%rbx)
 
   movq %rsp, %rax
