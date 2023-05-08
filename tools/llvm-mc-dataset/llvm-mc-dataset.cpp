@@ -64,7 +64,8 @@ int main(int argc, char **argv) {
           if (!graph.ParseFromIstream(&ifs))
             continue;
 
-          graphs[std::string{path.stem().c_str()}] = graph;
+          // Double stem in case of two extensions
+          graphs[std::string{path.stem().stem().c_str()}] = graph;
         }
 
         return graphs;
@@ -84,7 +85,8 @@ int main(int argc, char **argv) {
           if (!metric.ParseFromIstream(&ifs))
             continue;
 
-          metrics[std::string{path.stem().c_str()}] = metric;
+          // Double stem in case of two extensions
+          metrics[std::string{path.stem().stem().c_str()}] = metric;
         }
 
         return metrics;
