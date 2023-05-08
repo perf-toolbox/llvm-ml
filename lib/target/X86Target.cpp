@@ -210,6 +210,14 @@ public:
 
     return (desc.TSFlags & llvm::X86II::NotFP) == 0;
   }
+
+  bool isLea(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return opcode == llvm::X86::LEA32r || opcode == llvm::X86::LEA64_32r ||
+           opcode == llvm::X86::LEA64r;
+  }
+
 private:
   llvm::MCInstrInfo *mII;
 };

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "llvm/Support/Error.h"
 #include "llvm/TargetParser/Triple.h"
 
 #include <memory>
@@ -17,6 +18,10 @@ class MCRegisterInfo;
 class MCAsmInfo;
 class MCSubtargetInfo;
 class MCInstrInfo;
+class SourceMgr;
+class MCContext;
+class MCTargetOptions;
+class Target;
 } // namespace llvm
 
 namespace llvm_ml {
@@ -37,10 +42,18 @@ public:
   virtual bool isCompute(const llvm::MCInst &inst) = 0;
   virtual bool isNop(const llvm::MCInst &inst) = 0;
   virtual bool isFloat(const llvm::MCInst &inst) = 0;
+  virtual bool isLea(const llvm::MCInst &inst) = 0;
 };
 
 std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,
                                          llvm::MCInstrInfo *mcii);
 
 std::unique_ptr<MLTarget> createX86MLTarget(llvm::MCInstrInfo *mcii);
+
+llvm::Expected<std::vector<llvm::MCInst>>
+parseAssembly(llvm::SourceMgr &srcMgr, const llvm::MCInstrInfo &mcii,
+              const llvm::MCRegisterInfo &mcri, const llvm::MCAsmInfo &mcai,
+              const llvm::MCSubtargetInfo &msti, llvm::MCContext &context,
+              const llvm::Target *target, const llvm::Triple &triple,
+              const llvm::MCTargetOptions &options);
 } // namespace llvm_ml

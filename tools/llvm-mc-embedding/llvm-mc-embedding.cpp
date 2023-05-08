@@ -238,68 +238,6 @@ static const llvm::Target *getTarget(const char *ProgName) {
   return target;
 }
 
-namespace {
-class MCStreamerWrapper final : public llvm::MCStreamer {
-  std::vector<llvm::MCInst> &instrs;
-
-public:
-  MCStreamerWrapper(llvm::MCContext &Context, std::vector<llvm::MCInst> &instrs)
-      : MCStreamer(Context), instrs(instrs) {}
-
-  // We only want to intercept the emission of new instructions.
-  void emitInstruction(const llvm::MCInst &inst,
-                       const llvm::MCSubtargetInfo & /* unused */) override {
-    instrs.push_back(inst);
-  }
-
-  bool emitSymbolAttribute(llvm::MCSymbol *, llvm::MCSymbolAttr) override {
-    return true;
-  }
-
-  void emitCommonSymbol(llvm::MCSymbol *, uint64_t /*size*/,
-                        llvm::Align) override {}
-  void emitZerofill(llvm::MCSection *, llvm::MCSymbol *symbol = nullptr,
-                    uint64_t size = 0,
-                    llvm::Align byteAlignment = llvm::Align(1),
-                    llvm::SMLoc loc = llvm::SMLoc()) override {}
-  void emitGPRel32Value(const llvm::MCExpr *) override {}
-  void beginCOFFSymbolDef(const llvm::MCSymbol *) override {}
-  void emitCOFFSymbolStorageClass(int /*storageClass*/) override {}
-  void emitCOFFSymbolType(int /*type*/) override {}
-  void endCOFFSymbolDef() override {}
-};
-} // namespace
-
-llvm::Expected<std::vector<llvm::MCInst>>
-parseAssembly(llvm::SourceMgr &srcMgr, const llvm::MCInstrInfo &mcii,
-              const llvm::MCRegisterInfo &mcri, const llvm::MCAsmInfo &mcai,
-              const llvm::MCSubtargetInfo &msti, llvm::MCContext &context,
-              const llvm::Target *target, const llvm::Triple &triple,
-              llvm::MCTargetOptions options) {
-
-  std::vector<llvm::MCInst> instructions;
-
-  MCStreamerWrapper streamer(context, instructions);
-
-  auto parser = llvm::createMCAsmParser(srcMgr, context, streamer, mcai);
-
-  std::unique_ptr<llvm::MCTargetAsmParser> target_parser(
-      target->createMCAsmParser(msti, *parser, mcii, options));
-
-  if (!target_parser)
-    return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                   "Failed to create target parser");
-
-  parser->setTargetParser(*target_parser);
-
-  int parse_result = parser->Run(false);
-  if (parse_result)
-    return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                   "Failed to parse assembly");
-
-  return instructions;
-}
-
 static std::map<unsigned, size_t> getOpcodeMap(llvm::MCInstrInfo &mcii) {
   size_t opcodeId = 0;
   std::map<unsigned, size_t> map;
@@ -350,8 +288,8 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
       target->createMCObjectFileInfo(context, /*PIC=*/false));
   context.setObjectFileInfo(mcofi.get());
 
-  auto instructions = parseAssembly(sourceMgr, *mcii, *mcri, *mcai, *msti,
-                                    context, target, triple, options);
+  auto instructions = llvm_ml::parseAssembly(
+      sourceMgr, *mcii, *mcri, *mcai, *msti, context, target, triple, options);
 
   if (!instructions) {
     return instructions.takeError();

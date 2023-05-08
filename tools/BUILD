@@ -28,13 +28,21 @@ cc_binary(
     srcs = [
       "llvm-mc-extract/llvm-mc-extract.cpp",
     ],
+    defines = [
+      "BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION=1",
+      "BOOST_THREAD_PROVIDES_EXECUTORS",
+      "BOOST_THREAD_PROVIDES_FUTURE",
+      "BOOST_THREAD_USES_MOVE",
+    ],
     deps = [
       "@llvm-project//llvm:Support",
       "@llvm-project//llvm:AllTargetsDisassemblers",
+      "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@//lib:target",
       "@//third_party:indicators",
+      "@boost//:thread",
     ]
 )
 

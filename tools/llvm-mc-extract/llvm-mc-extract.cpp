@@ -36,9 +36,14 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
+#include <boost/thread/executors/basic_thread_pool.hpp>
+#include <boost/thread/future.hpp>
+#include <filesystem>
+#include <future>
 #include <indicators/indicators.hpp>
 
 using namespace llvm;
+namespace fs = std::filesystem;
 
 static cl::opt<std::string> InputFilename(cl::Positional,
                                           cl::desc("<input file>"));
@@ -56,6 +61,11 @@ static cl::opt<std::string>
 static cl::opt<std::string>
     TripleName("triple", cl::desc("Target triple to assemble for, "
                                   "see -version for available targets"));
+
+static cl::opt<bool> Postprocess(
+    "postprocess",
+    cl::desc(
+        "Apply postprocessing: remove move-only blocks, empty blocks, etc"));
 
 static const Target *getTarget(const object::ObjectFile *Obj) {
   // Figure out the target triple.
@@ -219,12 +229,171 @@ static void extractBasicBlocks(const object::ObjectFile &object,
   }
 }
 
+static const llvm::Target *getTarget(const char *ProgName) {
+  // Figure out the target triple.
+  if (TripleName.empty())
+    TripleName = llvm::sys::getDefaultTargetTriple();
+
+  llvm::Triple triple(llvm::Triple::normalize(TripleName));
+
+  // Get the target specific parser.
+  std::string Error;
+  const llvm::Target *target =
+      llvm::TargetRegistry::lookupTarget(ArchName, triple, Error);
+  if (!target) {
+    return nullptr;
+  }
+
+  // Update the triple name and return the found target.
+  TripleName = triple.getTriple();
+  return target;
+}
+
+static void postprocess() {
+  using namespace indicators;
+  indicators::show_console_cursor(false);
+  const fs::path blocks_dir{OutputDirectory.c_str()};
+
+  IndeterminateProgressBar spinner{
+      option::BarWidth{80},
+      option::Start{"["},
+      option::Fill{"·"},
+      option::Lead{"<==>"},
+      option::End{"]"},
+      option::PostfixText{"Collecting files..."},
+      option::ForegroundColor{indicators::Color::yellow},
+      option::FontStyles{
+          std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
+
+  unsigned int numThreads = boost::thread::hardware_concurrency();
+  boost::executors::basic_thread_pool pool{numThreads};
+
+  auto filenames = boost::async(pool, [&]() {
+    std::vector<fs::path> bbs;
+    bbs.reserve(10'000'000);
+
+    for (const auto &entry : fs::directory_iterator(blocks_dir)) {
+      auto path = entry.path();
+      if (!fs::is_regular_file(path) || path.extension() != ".s")
+        continue;
+
+      bbs.push_back(path);
+    }
+
+    spinner.mark_as_completed();
+
+    return bbs;
+  });
+
+  while (!spinner.is_completed()) {
+    spinner.tick();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  filenames.wait();
+  const std::vector<fs::path> &files = filenames.get();
+
+  spinner.set_option(option::ForegroundColor{Color::green});
+  spinner.set_option(option::PrefixText{"✔"});
+  spinner.set_option(option::PostfixText{"Complete!"});
+
+  std::vector<boost::future<void>> dispatchedTasks;
+  dispatchedTasks.reserve(numThreads);
+
+  BlockProgressBar bar{
+      option::BarWidth{80}, option::ForegroundColor{Color::green},
+      option::FontStyles{std::vector<FontStyle>{FontStyle::bold}},
+      option::MaxProgress{files.size()}};
+
+  llvm::errs() << "Running in " << numThreads << " threads...\n";
+  for (const auto &path : files) {
+    fs::path outFile = blocks_dir / path.filename();
+
+    auto future = boost::async(pool, [path = outFile]() {
+      const llvm::Target *target = getTarget("");
+      Triple triple(TripleName);
+
+      const llvm::MCTargetOptions options =
+          llvm::mc::InitMCTargetOptionsFromFlags();
+      std::unique_ptr<llvm::MCRegisterInfo> mcri(
+          target->createMCRegInfo(TripleName));
+      std::unique_ptr<llvm::MCAsmInfo> mcai(
+          target->createMCAsmInfo(*mcri, TripleName, options));
+      std::unique_ptr<llvm::MCSubtargetInfo> msti(
+          target->createMCSubtargetInfo(TripleName, "", ""));
+      std::unique_ptr<llvm::MCInstrInfo> mcii(target->createMCInstrInfo());
+
+      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> buffer =
+          llvm::MemoryBuffer::getFileOrSTDIN(path.c_str(), /*IsText=*/true);
+      if (std::error_code EC = buffer.getError()) {
+        // Remove all broken files
+        fs::remove(path);
+        return;
+      }
+
+      llvm::SourceMgr sourceMgr;
+
+      // Tell SrcMgr about this buffer, which is what the parser will pick
+      // up.
+      sourceMgr.AddNewSourceBuffer(std::move(*buffer), llvm::SMLoc());
+
+      llvm::MCContext context(triple, mcai.get(), mcri.get(), msti.get(),
+                              &sourceMgr);
+      std::unique_ptr<llvm::MCObjectFileInfo> mcofi(
+          target->createMCObjectFileInfo(context, /*PIC=*/false));
+      context.setObjectFileInfo(mcofi.get());
+
+      auto instructions =
+          llvm_ml::parseAssembly(sourceMgr, *mcii, *mcri, *mcai, *msti, context,
+                                 target, triple, options);
+
+      if (!instructions) {
+        (void)instructions.takeError();
+        fs::remove(path);
+        return;
+      }
+
+      if (instructions->size() == 0) {
+        fs::remove(path);
+        return;
+      }
+
+      auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
+
+      bool hasCompute = std::any_of(instructions->begin(), instructions->end(),
+                                    [&](const llvm::MCInst &inst) {
+                                      return !mlTarget->isMemLoad(inst) &&
+                                             !mlTarget->isMemStore(inst) &&
+                                             !mlTarget->isLea(inst);
+                                    });
+
+      // This basic block is probably not doing anything useful
+      if (!hasCompute) {
+        fs::remove(path);
+        return;
+      }
+    });
+
+    dispatchedTasks.push_back(std::move(future));
+
+    if (dispatchedTasks.size() == numThreads) {
+      boost::wait_for_all(dispatchedTasks.begin(), dispatchedTasks.end());
+
+      dispatchedTasks.clear();
+    }
+
+    bar.tick();
+  }
+  indicators::show_console_cursor(true);
+}
+
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
 
   InitializeAllTargetInfos();
   InitializeAllTargetMCs();
   InitializeAllDisassemblers();
+  InitializeAllAsmParsers();
 
   cl::ParseCommandLineOptions(argc, argv,
                               "extract asm basic blocks from binary\n");
@@ -263,6 +432,10 @@ int main(int argc, char **argv) {
   }
 
   extractBasicBlocks(*objOrErr.get(), target, Triple(TripleName));
+
+  if (Postprocess) {
+    postprocess();
+  }
 
   return 0;
 }
