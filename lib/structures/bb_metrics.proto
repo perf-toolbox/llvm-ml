@@ -11,4 +11,5 @@ message BBMetrics {
   uint64 total_context_switches = 6;
   uint64 measured_cycles = 7;
   optional string source = 8;
+  uint32 num_runs = 9;
 }

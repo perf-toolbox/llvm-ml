@@ -147,6 +147,7 @@ static void exportPBuf(const Measurement &noise, const Measurement &workload,
   metrics.set_total_cycles(workload.cycles);
   metrics.set_total_cache_misses(workload.cacheMisses);
   metrics.set_total_context_switches(workload.contextSwitches);
+  metrics.set_num_runs(NumRuns);
   if (noise.cycles < workload.cycles) {
     metrics.set_measured_cycles(workload.cycles - noise.cycles);
   } else {
