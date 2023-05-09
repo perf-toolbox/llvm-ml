@@ -150,7 +150,6 @@ static void extractBasicBlocks(const object::ObjectFile &object,
         option::BarWidth{80}, option::ForegroundColor{Color::green},
         option::FontStyles{
             std::vector<indicators::FontStyle>{indicators::FontStyle::bold}},
-        option::MaxProgress{s.value().getSize()},
         option::PrefixText{"Section " + std::to_string(s.index())}});
 
     bars.push_back(*owningBars.back());
@@ -221,8 +220,10 @@ static void extractBasicBlocks(const object::ObjectFile &object,
 
       bars[curSection].set_option(indicators::option::PostfixText{
           std::to_string(index) + "/" + std::to_string(sectionSize)});
-      bars[curSection].set_progress(static_cast<float>(index) * 100.f /
-                                    static_cast<float>(sectionSize));
+      int percent = static_cast<int>(
+          (static_cast<float>(index) / static_cast<float>(sectionSize)) *
+          100.f);
+      bars[curSection].set_progress(percent);
     }
     bars[curSection].set_progress(100);
     bars[curSection].mark_as_completed();
