@@ -156,6 +156,10 @@ static void exportPBuf(const Measurement &noise, const Measurement &workload,
   if (IncludeSource) {
     metrics.set_source(source);
   }
+
+  std::string serialized;
+  metrics.SerializeToString(&serialized);
+  os << serialized;
 }
 
 static const Target *getTarget() {
