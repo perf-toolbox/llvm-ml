@@ -67,6 +67,8 @@ static cl::opt<bool> Postprocess(
     cl::desc(
         "Apply postprocessing: remove move-only blocks, empty blocks, etc"));
 
+static llvm::mc::RegisterMCTargetOptionsFlags MOF;
+
 static const Target *getTarget(const object::ObjectFile *Obj) {
   // Figure out the target triple.
   Triple TheTriple("unknown-unknown-unknown");
