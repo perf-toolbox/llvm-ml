@@ -218,6 +218,18 @@ public:
            opcode == llvm::X86::LEA64r;
   }
 
+  bool isPush(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return opcode >= llvm::X86::PUSH16i8 && opcode <= llvm::X86::PUSHi32; 
+  }
+
+  bool isPop(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return opcode >= llvm::X86::POP16r && opcode <= llvm::X86::POPSS32; 
+  }
+
 private:
   llvm::MCInstrInfo *mII;
 };
