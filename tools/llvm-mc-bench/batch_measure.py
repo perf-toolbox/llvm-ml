@@ -32,6 +32,8 @@ inputs = sorted(os.listdir(args.input))
 
 if args.end != 0:
     inputs = inputs[args.start:args.end]
+else:
+    inputs = inputs[args.start:]
 
 total = len(inputs)
 
