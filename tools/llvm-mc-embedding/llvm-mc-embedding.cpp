@@ -83,6 +83,8 @@ private:
 };
 
 struct EdgeFeatures {
+  bool isData = false;
+
 private:
   friend class boost::serialization::access;
 
@@ -176,9 +178,11 @@ static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
   }
 
   for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
+    const auto &ef = g[e];
     auto *pbEdge = graph.add_edges();
     pbEdge->set_from(boost::source(e, g));
     pbEdge->set_to(boost::target(e, g));
+    pbEdge->set_is_data(ef.isData);
   }
 
   std::string serialized;
@@ -349,7 +353,9 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
     for (unsigned reg : readRegs) {
       if (lastWrite.count(reg)) {
         size_t offset = static_cast<size_t>(VirtualRoot == true);
-        boost::add_edge(lastWrite.at(reg) + offset, i + offset, g);
+        EdgeFeatures ef;
+        ef.isData = true;
+        boost::add_edge(lastWrite.at(reg) + offset, i + offset, ef, g);
       }
     }
 

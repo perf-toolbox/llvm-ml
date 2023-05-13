@@ -19,6 +19,7 @@ message Node {
 message Edge {
   uint32 from = 1;
   uint32 to = 2;
+  bool is_data = 3;
 }
 
 message BBGraph {
