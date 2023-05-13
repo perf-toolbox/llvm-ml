@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(
         )
 parser.add_argument("input")
 parser.add_argument("output")
-parser.add_argument("-j", "--num-procs", default=1, type=int)
+parser.add_argument("-cpus", default=1, type=str, required=True)
 parser.add_argument("-r", "--retries", default=5, type=int)
 parser.add_argument("-n", "--num_runs", default=10000, type=int)
 parser.add_argument("--start", default=0, type=int)
@@ -38,7 +38,7 @@ else:
 total = len(inputs)
 
 tasks = []
-cpus = [x for x in range(args.num_procs)]
+cpus = args.cpus.split(",")
 
 if args.progress:
     from tqdm import tqdm
@@ -48,7 +48,7 @@ progress = 0
 for bbf in inputs:
     while len(tasks) == args.num_procs:
         new_tasks = []
-        cpus = [x for x in range(args.num_procs)]
+        cpus = args.cpus.split(",")
 
         for t in tasks:
             try:
