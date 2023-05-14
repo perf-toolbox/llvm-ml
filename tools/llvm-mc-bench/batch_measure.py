@@ -54,7 +54,7 @@ if args.progress:
 
 progress = 0
 for bbf in inputs:
-    while len(tasks) == len(args.cpus.split(",")):
+    while len(cpus) == 0:
         new_tasks = []
         cpus = args.cpus.split(",")
 
