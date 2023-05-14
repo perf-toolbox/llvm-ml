@@ -45,6 +45,7 @@ public:
   virtual bool isLea(const llvm::MCInst &inst) = 0;
   virtual bool isPush(const llvm::MCInst &inst) = 0;
   virtual bool isPop(const llvm::MCInst &inst) = 0;
+  virtual bool isMov(const llvm::MCInst &inst) = 0;
 };
 
 std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,

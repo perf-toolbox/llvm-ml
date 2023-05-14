@@ -230,6 +230,12 @@ public:
     return opcode >= llvm::X86::POP16r && opcode <= llvm::X86::POPSS32; 
   }
 
+  bool isMov(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return opcode >= llvm::X86::MOV16ao16 && opcode <= llvm::X86::MOVZX64rr8;
+  }
+
 private:
   llvm::MCInstrInfo *mII;
 };

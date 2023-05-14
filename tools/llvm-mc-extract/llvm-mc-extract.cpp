@@ -363,14 +363,13 @@ static void postprocess() {
 
       auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
 
-      bool hasCompute = std::any_of(instructions->begin(), instructions->end(),
-                                    [&](const llvm::MCInst &inst) {
-                                      return !mlTarget->isMemLoad(inst) &&
-                                             !mlTarget->isMemStore(inst) &&
-                                             !mlTarget->isLea(inst) &&
-                                             !mlTarget->isPush(inst) &&
-                                             !mlTarget->isPop(inst);
-                                    });
+      bool hasCompute = std::any_of(
+          instructions->begin(), instructions->end(),
+          [&](const llvm::MCInst &inst) {
+            return !mlTarget->isMemLoad(inst) && !mlTarget->isMemStore(inst) &&
+                   !mlTarget->isMov(inst) && !mlTarget->isLea(inst) &&
+                   !mlTarget->isPush(inst) && !mlTarget->isPop(inst);
+          });
 
       // This basic block is probably not doing anything useful
       if (!hasCompute) {
