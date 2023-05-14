@@ -359,7 +359,7 @@ static void postprocess() {
         return;
       }
 
-      if (instructions->size() == 0) {
+      if (instructions->size() < 2) {
         fs::remove(path);
         return;
       }
