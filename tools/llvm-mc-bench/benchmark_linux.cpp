@@ -137,8 +137,14 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
     cpu_set_t cpuSet;
     CPU_ZERO(&cpuSet);
     CPU_SET(pinnedCPU, &cpuSet);
-    sched_setaffinity(0, sizeof(cpu_set_t), &cpuSet);
-    setpriority(PRIO_PROCESS, 0, 0);
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuSet) < 0) {
+      llvm::errs() << "Failed to pin process to CPU #" << pinnedCPU << "\n";
+      exit(1);
+    }
+    struct sched_param schedParam = {.sched_priority = 90};
+    if (sched_setscheduler(0, SCHED_FIFO, &schedParam) < 0) {
+      llvm::errs() << "WARNING: failed to update scheduler policy\n";
+    }
 
     gBenchFn = bench;
     gSharedMem = shmemFD;
@@ -182,13 +188,14 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
           uint64_t contextSwitches = ptr[2];
 
           // Try to eliminate as much noise as possible
-          if (cacheMisses != 0 && (i + 1 != MAX_FAULTS)) {
+          if (cacheMisses != 0) {
             void *restartAddress = (void *)&restart_only;
             restartChild(child, restartAddress);
 
             continue;
           }
-          if (contextSwitches != 0 && (i + 1 != MAX_FAULTS)) {
+          if (contextSwitches != 0) {
+            llvm::errs() << "Context switches is too high\n";
             void *restartAddress = (void *)&restart_only;
             restartChild(child, restartAddress);
 

@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import os
+import sys
 
 def create_task(basic_block, out_dir, cpu_num, retry, num_runs):
     out_name = os.path.basename(basic_block)
@@ -28,6 +29,13 @@ parser.add_argument("--progress", action="store_true")
 
 args = parser.parse_args()
 
+if sys.platform == 'linux':
+    with open('/proc/sys/kernel/perf_event_paranoid', 'r') as f:
+        val = f.read()
+        if val.strip() != '-1':
+            print("Enable system profiling: echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid")
+            exit()
+
 inputs = sorted(os.listdir(args.input))
 
 if args.end != 0:
@@ -46,7 +54,7 @@ if args.progress:
 
 progress = 0
 for bbf in inputs:
-    while len(tasks) == args.num_procs:
+    while len(tasks) == len(args.cpus.split(",")):
         new_tasks = []
         cpus = args.cpus.split(",")
 

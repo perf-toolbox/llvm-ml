@@ -89,7 +89,7 @@ static cl::opt<std::string>
 static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
                                            cl::init("-"));
 static cl::opt<int> NumRuns("n", cl::desc("number or repititions"),
-                            cl::init(10000));
+                            cl::init(200));
 
 static cl::opt<int>
     PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
@@ -115,6 +115,7 @@ struct Measurement {
   uint64_t cycles;
   uint64_t cacheMisses;
   uint64_t contextSwitches;
+  size_t numRuns;
 };
 
 static void exportJSON(const Measurement &noise, const Measurement &workload,
@@ -131,6 +132,7 @@ static void exportJSON(const Measurement &noise, const Measurement &workload,
   } else {
     res["measured_cycles"] = 0;
   }
+  res["num_runs"] = workload.numRuns - noise.numRuns;
   if (IncludeSource) {
     res["source"] = source;
   }
@@ -147,7 +149,7 @@ static void exportPBuf(const Measurement &noise, const Measurement &workload,
   metrics.set_total_cycles(workload.cycles);
   metrics.set_total_cache_misses(workload.cacheMisses);
   metrics.set_total_context_switches(workload.contextSwitches);
-  metrics.set_num_runs(NumRuns);
+  metrics.set_num_runs(workload.numRuns - noise.numRuns);
   if (noise.cycles < workload.cycles) {
     metrics.set_measured_cycles(workload.cycles - noise.cycles);
   } else {
@@ -240,15 +242,13 @@ int main(int argc, char **argv) {
     }
   }
 
-  const auto buildInlineAsm = [&](bool addWorkload) {
+  const auto buildInlineAsm = [&](size_t numRep) {
     std::string inlineAsm = "call void asm sideeffect \"";
 
     inlineAsm += mlTarget->getBenchPrologue();
 
-    if (addWorkload) {
-      for (int i = 0; i < NumRuns; i++) {
-        inlineAsm += microbenchAsm;
-      }
+    for (size_t i = 0; i < numRep; i++) {
+      inlineAsm += microbenchAsm;
     }
     inlineAsm += mlTarget->getBenchEpilogue();
 
@@ -257,12 +257,13 @@ int main(int argc, char **argv) {
     return inlineAsm;
   };
 
+  size_t noiseRep = static_cast<size_t>(0.1 * NumRuns);
   std::string completeHarness = kHarnessTemplate;
   {
     size_t insertPos = completeHarness.find("; WORKLOAD");
-    completeHarness.insert(insertPos, buildInlineAsm(true));
+    completeHarness.insert(insertPos, buildInlineAsm(noiseRep));
     insertPos = completeHarness.find("; NOISE");
-    completeHarness.insert(insertPos, buildInlineAsm(false));
+    completeHarness.insert(insertPos, buildInlineAsm(NumRuns + noiseRep));
   }
 
   auto llvmContext = std::make_unique<LLVMContext>();
@@ -319,19 +320,22 @@ int main(int argc, char **argv) {
   llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
   Measurement noise;
-  const auto noiseCb = [&noise](uint64_t cycles, uint64_t cacheMisses,
-                                uint64_t contextSwitches) {
+  const auto noiseCb = [&noise, noiseRep](uint64_t cycles, uint64_t cacheMisses,
+                                          uint64_t contextSwitches) {
     noise.cycles = cycles;
     noise.contextSwitches = contextSwitches;
     noise.cacheMisses = cacheMisses;
+    noise.numRuns = noiseRep;
   };
 
   Measurement workload;
-  const auto benchCb = [&workload](uint64_t cycles, uint64_t cacheMisses,
-                                   uint64_t contextSwitches) {
+  const auto benchCb = [&workload, noiseRep](uint64_t cycles,
+                                             uint64_t cacheMisses,
+                                             uint64_t contextSwitches) {
     workload.cycles = cycles;
     workload.contextSwitches = contextSwitches;
     workload.cacheMisses = cacheMisses;
+    workload.numRuns = noiseRep + NumRuns;
   };
 
   auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
