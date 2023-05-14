@@ -261,9 +261,9 @@ int main(int argc, char **argv) {
   std::string completeHarness = kHarnessTemplate;
   {
     size_t insertPos = completeHarness.find("; WORKLOAD");
-    completeHarness.insert(insertPos, buildInlineAsm(noiseRep));
-    insertPos = completeHarness.find("; NOISE");
     completeHarness.insert(insertPos, buildInlineAsm(NumRuns + noiseRep));
+    insertPos = completeHarness.find("; NOISE");
+    completeHarness.insert(insertPos, buildInlineAsm(noiseRep));
   }
 
   auto llvmContext = std::make_unique<LLVMContext>();
@@ -338,6 +338,16 @@ int main(int argc, char **argv) {
     workload.numRuns = noiseRep + NumRuns;
   };
 
+  {
+    auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
+    if (maybeErr) {
+      // This is a warm-up run, we don't care much
+    }
+    maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
+    if (maybeErr) {
+      // This is a warm-up run, we don't care much
+    }
+  }
   auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
   if (maybeErr) {
     errs() << "Failed to measure system noise... " << maybeErr << "\n";

@@ -1,4 +1,5 @@
 //===--- benchmark_linux.cpp - Benchmark runner -----------------------C++-===//
+//
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
@@ -25,7 +26,7 @@
 #include "benchmark.hpp"
 #include "counters.hpp"
 
-constexpr unsigned MAX_FAULTS = 30;
+constexpr unsigned MAX_FAULTS = 500;
 
 struct PageFaultCommand {
   void *addr;
