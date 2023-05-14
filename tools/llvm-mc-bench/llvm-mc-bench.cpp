@@ -88,8 +88,11 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
                                            cl::init("-"));
-static cl::opt<int> NumRuns("n", cl::desc("number or repititions"),
+static cl::opt<int> NumRuns("n", cl::desc("number of basic block repititions"),
                             cl::init(200));
+static cl::opt<int>
+    MaxRepeat("r", cl::desc("maximum number of test harness re-runs"),
+              cl::init(10));
 
 static cl::opt<int>
     PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
@@ -348,23 +351,44 @@ int main(int argc, char **argv) {
       // This is a warm-up run, we don't care much
     }
   }
+
   auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
   if (maybeErr) {
     errs() << "Failed to measure system noise... " << maybeErr << "\n";
     return 1;
+  }
+  Measurement takenNoise = noise;
+  for (int i = 0; i < MaxRepeat; i++) {
+    maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
+    if (maybeErr) {
+      continue;
+    }
+
+    if (noise.contextSwitches == 0 && noise.cycles < takenNoise.cycles)
+      takenNoise = noise;
   }
   maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
   if (maybeErr) {
     errs() << "Child terminated abnormally... " << maybeErr << "\n";
     return 1;
   }
+  Measurement takenWorkload = workload;
+  for (int i = 0; i < MaxRepeat; i++) {
+    maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
+    if (maybeErr) {
+      continue;
+    }
+
+    if (workload.contextSwitches == 0 && workload.cycles < takenWorkload.cycles)
+      takenWorkload = workload;
+  }
 
   std::error_code errorCode;
   raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
   if (ReadableJSON) {
-    exportJSON(noise, workload, (*buffer)->getBuffer().str(), outfile);
+    exportJSON(takenNoise, workload, (*buffer)->getBuffer().str(), outfile);
   } else {
-    exportPBuf(noise, workload, (*buffer)->getBuffer().str(), outfile);
+    exportPBuf(takenNoise, workload, (*buffer)->getBuffer().str(), outfile);
   }
   outfile.close();
 
