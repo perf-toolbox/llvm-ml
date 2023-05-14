@@ -66,6 +66,9 @@ static cl::opt<bool> Postprocess(
     "postprocess",
     cl::desc(
         "Apply postprocessing: remove move-only blocks, empty blocks, etc"));
+static cl::opt<bool>
+    PostprocessOnly("postprocess-only",
+                    cl::desc("Only run postprocessing on extracted data"));
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -435,11 +438,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  extractBasicBlocks(*objOrErr.get(), target, Triple(TripleName));
+  if (!PostprocessOnly)
+    extractBasicBlocks(*objOrErr.get(), target, Triple(TripleName));
 
-  if (Postprocess) {
+  if (Postprocess || PostprocessOnly)
     postprocess();
-  }
 
   return 0;
 }
