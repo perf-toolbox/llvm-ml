@@ -188,14 +188,13 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
           uint64_t contextSwitches = ptr[2];
 
           // Try to eliminate as much noise as possible
-          if (cacheMisses != 0) {
+          if (cacheMisses != 0 && (i + 1 != MAX_FAULTS)) {
             void *restartAddress = (void *)&restart_only;
             restartChild(child, restartAddress);
 
             continue;
           }
-          if (contextSwitches != 0) {
-            llvm::errs() << "Context switches is too high\n";
+          if (contextSwitches != 0 && (i + 1 != MAX_FAULTS)) {
             void *restartAddress = (void *)&restart_only;
             restartChild(child, restartAddress);
 
