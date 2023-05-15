@@ -2,6 +2,7 @@ import argparse
 import subprocess
 import os
 import sys
+import psutil
 
 def create_task(basic_block, out_dir, cpu_num, retry, num_runs):
     out_name = os.path.basename(basic_block)
@@ -20,9 +21,9 @@ parser = argparse.ArgumentParser(
         )
 parser.add_argument("input")
 parser.add_argument("output")
-parser.add_argument("-cpus", default=1, type=str, required=True)
-parser.add_argument("-r", "--retries", default=5, type=int)
-parser.add_argument("-n", "--num_runs", default=10000, type=int)
+parser.add_argument("--cpus", type=str, required=True)
+parser.add_argument("-r", "--retries", default=2, type=int)
+parser.add_argument("-n", "--num_runs", default=200, type=int)
 parser.add_argument("--start", default=0, type=int)
 parser.add_argument("--end", default=0, type=int)
 parser.add_argument("--progress", action="store_true")
@@ -62,7 +63,10 @@ for bbf in inputs:
             try:
                 t["proc"].wait(10)
             except subprocess.TimeoutExpired:
-                t["proc"].kill()
+                parent = psutil.Process(t["proc"].pid)
+                for child in parent.children(recursive=True):
+                    child.kill()
+                parent.kill()
                 continue
             if t["proc"].returncode != 0 and t["retries"] + 1 < args.retries:
                 new_tasks.append(create_task(t["basic_block"], args.output, t["cpu"], t["retries"] + 1, args.num_runs))

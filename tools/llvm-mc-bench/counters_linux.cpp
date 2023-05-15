@@ -57,8 +57,11 @@ CountersContext *counters_init() {
   pea.size = sizeof(struct perf_event_attr);
   pea.config = PERF_COUNT_HW_CPU_CYCLES;
   pea.disabled = 1;
+  pea.pinned = 1;
   pea.exclude_kernel = 1;
   pea.exclude_hv = 1;
+  pea.exclude_idle = 1;
+  pea.exclude_callchain_kernel = 1;
   pea.read_format = PERF_FORMAT_GROUP | PERF_FORMAT_ID;
   ctx->baseFd = syscall(__NR_perf_event_open, &pea, 0, -1, -1, 0);
   if (ctx->baseFd == -1) {
@@ -68,12 +71,16 @@ CountersContext *counters_init() {
   ioctl(ctx->baseFd, PERF_EVENT_IOC_ID, &ctx->cyclesId);
 
   memset(&pea, 0, sizeof(struct perf_event_attr));
-  pea.type = PERF_TYPE_HARDWARE;
+  pea.type = PERF_TYPE_HW_CACHE;
   pea.size = sizeof(struct perf_event_attr);
-  pea.config = PERF_COUNT_HW_CACHE_MISSES;
+  pea.config = PERF_COUNT_HW_CACHE_L1D | (PERF_COUNT_HW_CACHE_OP_READ << 8) |
+               (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+  // pea.pinned = 1;
   pea.disabled = 1;
   pea.exclude_kernel = 1;
   pea.exclude_hv = 1;
+  pea.exclude_idle = 1;
+  pea.exclude_callchain_kernel = 1;
   pea.read_format = PERF_FORMAT_GROUP | PERF_FORMAT_ID;
   ctx->cacheMissFd = syscall(__NR_perf_event_open, &pea, 0, -1, ctx->baseFd, 0);
   if (ctx->cacheMissFd == -1) {
