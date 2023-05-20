@@ -4,6 +4,9 @@ cc_binary(
       "llvm-mc-bench/llvm-mc-bench.cpp",
       "llvm-mc-bench/counters.hpp",
       "llvm-mc-bench/benchmark.hpp",
+      "llvm-mc-bench/benchmark.cpp",
+      "llvm-mc-bench/BenchmarkResult.hpp",
+      "llvm-mc-bench/BenchmarkResult.cpp",
     ] + select({
       "@platforms//os:linux": [
         "llvm-mc-bench/counters_linux.cpp",
@@ -20,7 +23,12 @@ cc_binary(
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",
-    ]
+    ] + select({
+      "@platforms//os:linux": [
+        "//third_party:libpfm",
+      ],
+      "//conditions:default": [],
+    })
 )
 
 cc_binary(

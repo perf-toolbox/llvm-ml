@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "lib/structures/bb_graph.pb.h"
+#include "lib/structures/mc_graph.pb.h"
 #include "llvm-ml/target/Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
@@ -156,7 +156,7 @@ static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
 
 static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
                        llvm::raw_ostream &os) {
-  llvm_ml::BBGraph graph;
+  llvm_ml::MCGraph graph;
   graph.set_source(boost::get_property(g, &GraphProperties::source));
   graph.set_num_opcodes(boost::get_property(g, &GraphProperties::numOpcodes));
   graph.set_has_virtual_root(

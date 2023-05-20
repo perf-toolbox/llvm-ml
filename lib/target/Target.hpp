@@ -22,14 +22,26 @@ class SourceMgr;
 class MCContext;
 class MCTargetOptions;
 class Target;
+class IRBuilderBase;
+class Value;
 } // namespace llvm
 
 namespace llvm_ml {
+class InlineAsmBuilder {
+public:
+  virtual void createSaveState(llvm::IRBuilderBase &builder) = 0;
+  virtual void createRestoreState(llvm::IRBuilderBase &builder) = 0;
+  virtual void createBranch(llvm::IRBuilderBase &builder,
+                            llvm::StringRef label) = 0;
+  virtual void createLabel(llvm::IRBuilderBase &builder,
+                           llvm::StringRef labelName) = 0;
+
+  virtual ~InlineAsmBuilder() = default;
+};
+
 class MLTarget {
 public:
   virtual ~MLTarget() = default;
-  virtual std::string getBenchPrologue() = 0;
-  virtual std::string getBenchEpilogue() = 0;
 
   virtual std::set<unsigned> getReadRegisters(const llvm::MCInst &) = 0;
   virtual std::set<unsigned> getWriteRegisters(const llvm::MCInst &) = 0;
@@ -46,6 +58,8 @@ public:
   virtual bool isPush(const llvm::MCInst &inst) = 0;
   virtual bool isPop(const llvm::MCInst &inst) = 0;
   virtual bool isMov(const llvm::MCInst &inst) = 0;
+
+  virtual std::unique_ptr<InlineAsmBuilder> createInlineAsmBuilder() = 0;
 };
 
 std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,

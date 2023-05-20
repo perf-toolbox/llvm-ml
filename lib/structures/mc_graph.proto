@@ -22,7 +22,7 @@ message Edge {
   bool is_data = 3;
 }
 
-message BBGraph {
+message MCGraph {
   repeated Node nodes = 1;
   repeated Edge edges = 2;
   uint32 num_opcodes = 3;

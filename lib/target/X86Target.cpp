@@ -5,16 +5,17 @@
 
 #include "Target.hpp"
 
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include "MCTargetDesc/X86BaseInfo.h"
 
-// TODO(Alex) I wonder if the same can be achieved by simply putting
-// all of the assembly basic blocks into their own function. Would this
-// make the code more portable and concise?
 constexpr auto PrologueX64 = R"(
   push %rax
   push %rbx
@@ -112,14 +113,44 @@ constexpr auto Epilogue = R"(
 )";
 
 namespace {
+class X86InlineAsmBuilder : public llvm_ml::InlineAsmBuilder {
+public:
+  void createSaveState(llvm::IRBuilderBase &builder) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+    // TODO can we use fxsave here?
+    // TODO can we just enumerate all registers for current target?
+    auto asmCallee =
+        llvm::InlineAsm::get(voidFuncTy, std::string(PrologueX64) + PrologueAVX,
+                             "~{dirflag},~{fpsr},~{flags}", true);
+    builder.CreateCall(asmCallee);
+  }
+
+  void createRestoreState(llvm::IRBuilderBase &builder) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, Epilogue,
+                                          "~{dirflag},~{fpsr},~{flags}", true);
+    builder.CreateCall(asmCallee);
+  }
+  void createBranch(llvm::IRBuilderBase &builder,
+                    llvm::StringRef label) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+    auto asmCallee =
+        llvm::InlineAsm::get(voidFuncTy, ("jmp " + label).str(),
+                             "~{dirflag},~{fpsr},~{flags}", false, true);
+    builder.CreateCall(asmCallee);
+  }
+  void createLabel(llvm::IRBuilderBase &builder,
+                   llvm::StringRef labelName) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, (labelName + ":").str(),
+                                          "", false, true);
+    builder.CreateCall(asmCallee);
+  }
+};
+
 class X86Target : public llvm_ml::MLTarget {
 public:
   X86Target(llvm::MCInstrInfo *mcii) : mII(mcii) {}
-
-  std::string getBenchPrologue() override {
-    return std::string(PrologueX64) + std::string(PrologueAVX);
-  }
-  std::string getBenchEpilogue() override { return std::string(Epilogue); }
 
   std::set<unsigned> getReadRegisters(const llvm::MCInst &inst) override {
     std::set<unsigned> readRegs;
@@ -234,6 +265,10 @@ public:
     unsigned opcode = inst.getOpcode();
 
     return opcode >= llvm::X86::MOV16ao16 && opcode <= llvm::X86::MOVZX64rr8;
+  }
+
+  std::unique_ptr<llvm_ml::InlineAsmBuilder> createInlineAsmBuilder() override {
+    return std::make_unique<X86InlineAsmBuilder>();
   }
 
 private:

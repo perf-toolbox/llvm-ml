@@ -4,3 +4,6 @@
 [submodule "third_party/indicators"]
 	path = third_party/indicators
 	url = https://github.com/p-ranav/indicators.git
+[submodule "third_party/libpfm4"]
+	path = third_party/libpfm4
+	url = https://git.code.sf.net/p/perfmon2/libpfm4
