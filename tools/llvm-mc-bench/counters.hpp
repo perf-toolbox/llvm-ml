@@ -17,6 +17,7 @@ enum class Counter {
   MicroOps,
   ContextSwitches,
   CacheMisses,
+  MisalignedLoads,
 };
 
 struct CounterValue {

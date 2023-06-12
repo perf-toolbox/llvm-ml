@@ -51,6 +51,12 @@ constexpr auto PrologueX64 = R"(
   shl $$5, %rsp
   sub $$0x10, %rsp
 
+  add $$-128, %rsp
+  pushf
+  orl $$0x40000, (%rsp)
+  popf
+  sub $$-128, %rsp
+
   movq $$0x2324000, %rax 
   movq $$0x2324000, %rbx  
   movq $$0x2324000, %rcx 
@@ -89,6 +95,12 @@ constexpr auto PrologueAVX = R"(
 )";
 
 constexpr auto Epilogue = R"(
+  add $$-128, %rsp
+  pushf
+  andl $$0xFFFFFFFFFFFBFFFF, (%rsp)
+  popf
+  sub $$-128, %rsp
+
   movq $$0x2325000, %rbx
   movq (%rbx), %rax
   movq %rax, %rbp

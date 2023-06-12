@@ -52,6 +52,7 @@ struct BenchmarkResult {
   uint64_t numMicroOps =
       0; ///< number of micro-operations retired, may be 0 on some platforms
   uint64_t numInstructions = 0; ///< number of HW instructions retired
+  uint64_t numMisalignedLoads = 0;
 };
 
 inline Measurement operator-(const BenchmarkResult &wl,

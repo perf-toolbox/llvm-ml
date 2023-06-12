@@ -166,6 +166,8 @@ llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
           out[3] = val.value;
         } else if (val.type == Counter::MicroOps) {
           out[4] = val.value;
+        } else if (val.type == Counter::MisalignedLoads) {
+          out[5] = val.value;
         }
       }
     });
@@ -200,6 +202,7 @@ llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
           uint64_t contextSwitches = ptr[2];
           uint64_t instructions = ptr[3];
           uint64_t uops = ptr[4];
+          uint64_t mloads = ptr[5];
 
           // Try to eliminate as much noise as possible
           if (cacheMisses != 0 && (i + 1 != MAX_FAULTS)) {
@@ -221,6 +224,7 @@ llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
           res.numCacheMisses = cacheMisses;
           res.numInstructions = instructions;
           res.numMicroOps = uops;
+          res.numMisalignedLoads = mloads;
           return res;
         }
 
