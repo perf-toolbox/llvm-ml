@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "lib/structures/bb_graph.pb.h"
 #include "lib/structures/mc_dataset.pb.h"
+#include "lib/structures/mc_graph.pb.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -50,9 +50,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::future<std::map<std::string, llvm_ml::BBGraph>> graphFuture =
+  std::future<std::map<std::string, llvm_ml::MCGraph>> graphFuture =
       std::async(std::launch::async, [&]() {
-        std::map<std::string, llvm_ml::BBGraph> graphs;
+        std::map<std::string, llvm_ml::MCGraph> graphs;
 
         for (auto d : fs::directory_iterator(graphsDir)) {
           fs::path path = d.path();
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
             continue;
 
           std::fstream ifs{path};
-          llvm_ml::BBGraph graph;
+          llvm_ml::MCGraph graph;
           if (!graph.ParseFromIstream(&ifs))
             continue;
 
@@ -71,9 +71,9 @@ int main(int argc, char **argv) {
         return graphs;
       });
 
-  std::future<std::map<std::string, llvm_ml::BBMetrics>> metricsFuture =
+  std::future<std::map<std::string, llvm_ml::MCMetrics>> metricsFuture =
       std::async(std::launch::async, [&]() {
-        std::map<std::string, llvm_ml::BBMetrics> metrics;
+        std::map<std::string, llvm_ml::MCMetrics> metrics;
 
         for (auto d : fs::directory_iterator(metricsDir)) {
           fs::path path = d.path();
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             continue;
 
           std::fstream ifs{path};
-          llvm_ml::BBMetrics metric;
+          llvm_ml::MCMetrics metric;
           if (!metric.ParseFromIstream(&ifs))
             continue;
 

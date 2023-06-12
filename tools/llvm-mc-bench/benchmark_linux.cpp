@@ -26,7 +26,7 @@
 #include "benchmark.hpp"
 #include "counters.hpp"
 
-constexpr unsigned MAX_FAULTS = 500;
+constexpr unsigned MAX_FAULTS = 30;
 
 struct PageFaultCommand {
   void *addr;
@@ -87,25 +87,18 @@ void map_and_restart() {
   }
 
   gBenchFn(gCont, gOut);
-  uint64_t *out = static_cast<size_t *>(gOut);
-  out[1] = llvm_ml::counters_context_switches(gCont);
-  out[2] = llvm_ml::counters_cache_misses(gCont);
-  llvm_ml::counters_free(gCont);
+  llvm_ml::flushCounters(gCont);
   close(gSharedMem);
   _exit(0);
 }
 void restart_only() {
   gBenchFn(gCont, gOut);
-  uint64_t *out = static_cast<size_t *>(gOut);
-  out[1] = llvm_ml::counters_context_switches(gCont);
-  out[2] = llvm_ml::counters_cache_misses(gCont);
-  llvm_ml::counters_free(gCont);
+  llvm_ml::flushCounters(gCont);
   close(gSharedMem);
   _exit(0);
 }
 }
 
-namespace llvm_ml {
 static void restartChild(pid_t pid, void *restart_addr) {
   struct user_regs_struct regs;
   ptrace(PTRACE_GETREGS, pid, NULL, &regs);
@@ -122,8 +115,9 @@ static int allocateSharedMemory() {
   return fd;
 }
 
-llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
-                         int pinnedCPU) {
+namespace llvm_ml::detail {
+llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
+                                                   int pinnedCPU) {
   int status;
   int shmemFD = allocateSharedMemory();
 
@@ -152,17 +146,36 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
 
     gOut = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmemFD,
                 4096 * 2);
+    memset(gOut, 0, 4096);
     gCmd = (PageFaultCommand *)mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
                                     MAP_SHARED, shmemFD, 4096 * 3);
 
     // LLVM installs its own segfault handler. We don't need that.
     signal(SIGSEGV, SIG_DFL);
 
-    gCont = llvm_ml::counters_init();
+    auto counters = createCounters([](llvm::ArrayRef<CounterValue> values) {
+      uint64_t *out = static_cast<uint64_t *>(gOut);
+      for (const auto &val : values) {
+        if (val.type == Counter::Cycles) {
+          out[0] = val.value;
+        } else if (val.type == Counter::CacheMisses) {
+          out[1] = val.value;
+        } else if (val.type == Counter::ContextSwitches) {
+          out[2] = val.value;
+        } else if (val.type == Counter::Instructions) {
+          out[3] = val.value;
+        } else if (val.type == Counter::MicroOps) {
+          out[4] = val.value;
+        } else if (val.type == Counter::MisalignedLoads) {
+          out[5] = val.value;
+        }
+      }
+    });
+
+    gCont = counters.get();
 
     bench(gCont, gOut);
 
-    llvm_ml::counters_free(gCont);
     close(shmemFD);
     _exit(0);
   } else { // close(fds[0]);
@@ -187,6 +200,9 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
           uint64_t cycles = ptr[0];
           uint64_t cacheMisses = ptr[1];
           uint64_t contextSwitches = ptr[2];
+          uint64_t instructions = ptr[3];
+          uint64_t uops = ptr[4];
+          uint64_t mloads = ptr[5];
 
           // Try to eliminate as much noise as possible
           if (cacheMisses != 0 && (i + 1 != MAX_FAULTS)) {
@@ -202,8 +218,14 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
             continue;
           }
 
-          cb(cycles, cacheMisses, contextSwitches);
-          return llvm::Error::success();
+          BenchmarkResult res;
+          res.numCycles = cycles;
+          res.numContextSwitches = contextSwitches;
+          res.numCacheMisses = cacheMisses;
+          res.numInstructions = instructions;
+          res.numMicroOps = uops;
+          res.numMisalignedLoads = mloads;
+          return res;
         }
 
         return llvm::createStringError(
@@ -229,12 +251,6 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
       void *pageFaultAddress = siginfo.si_addr;
       void *restartAddress = (void *)&map_and_restart;
 
-      // TODO(Alex): do we need special handling for sigtrap?
-      /*
-      if (siginfo.si_signo == 5)
-        fault_addr = (void *)INIT_VALUE;
-      */
-
       gCmd->addr = pageFaultAddress;
 
       if ((void *)regs.rip == lastSignaledInstruction)
@@ -254,4 +270,4 @@ llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
   return llvm::createStringError(
       std::make_error_code(std::errc::invalid_argument), "Unknown error");
 }
-} // namespace llvm_ml
+} // namespace llvm_ml::detail

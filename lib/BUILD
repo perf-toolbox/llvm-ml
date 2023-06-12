@@ -5,8 +5,8 @@ load("@rules_python//python:proto.bzl", "py_proto_library")
 proto_library(
     name = "structures_proto",
     srcs = [
-        "structures/bb_graph.proto",
-        "structures/bb_metrics.proto",
+        "structures/mc_graph.proto",
+        "structures/mc_metrics.proto",
         "structures/mc_dataset.proto",
     ]
 )

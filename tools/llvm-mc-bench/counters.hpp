@@ -4,19 +4,36 @@
 
 #pragma once
 
+#include "llvm/ADT/ArrayRef.h"
+
 #include <cstdint>
+#include <functional>
+#include <memory>
 
 namespace llvm_ml {
-struct CountersContext;
+enum class Counter {
+  Cycles,
+  Instructions,
+  MicroOps,
+  ContextSwitches,
+  CacheMisses,
+  MisalignedLoads,
+};
 
-CountersContext *counters_init();
-void counters_free(CountersContext *);
-uint64_t counters_context_switches(CountersContext *ctx);
-uint64_t counters_cache_misses(CountersContext *ctx);
+struct CounterValue {
+  Counter type;
+  size_t value;
+};
+
+using CountersCb = std::function<void(llvm::ArrayRef<CounterValue>)>;
+
+class CountersContext;
+
+void flushCounters(CountersContext *ctx);
+std::shared_ptr<CountersContext> createCounters(const CountersCb &cb);
 } // namespace llvm_ml
 
 extern "C" {
 void counters_start(llvm_ml::CountersContext *);
 void counters_stop(llvm_ml::CountersContext *);
-uint64_t counters_cycles(llvm_ml::CountersContext *);
 }

@@ -5,11 +5,12 @@
 
 #include "benchmark.hpp"
 #include "counters.hpp"
-#include "lib/structures/bb_metrics.pb.h"
 #include "llvm-ml/target/Target.hpp"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -39,47 +40,9 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
-#include <nlohmann/json.hpp>
-
 using namespace llvm;
-using json = nlohmann::json;
 
-constexpr auto kHarnessTemplate = R"(
-      declare void @counters_start(ptr noundef)
-      declare void @counters_stop(ptr noundef)
-      declare i64 @counters_cycles(ptr noundef)
-
-      define void @bench(ptr noundef %ctrctx, ptr noundef %out) {
-      entry:
-        call void @counters_start(ptr noundef %ctrctx)
-
-        ; WORKLOAD
-        call void @counters_stop(ptr noundef %ctrctx)
-
-        %cycles = call i64 @counters_cycles(ptr noundef %ctrctx)
-
-        store i64 %cycles, ptr %out, align 8
-
-        ret void
-      }
-
-      define void @baseline(ptr noundef %ctrctx, ptr noundef %out) {
-      entry:
-        call void @counters_start(ptr noundef %ctrctx)
-
-        ; NOISE 
-
-        call void @counters_stop(ptr noundef %ctrctx)
-
-        %cycles = call i64 @counters_cycles(ptr noundef %ctrctx)
-
-        store i64 %cycles, ptr %out, align 8
-
-        ret void
-      }
-
-      attributes #1 = { nounwind }
-    )";
+inline constexpr float kNoiseFrac = 0.1f;
 
 static mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -88,11 +51,12 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
                                            cl::init("-"));
-static cl::opt<int> NumRuns("n", cl::desc("number of basic block repititions"),
-                            cl::init(200));
-static cl::opt<int>
-    MaxRepeat("r", cl::desc("maximum number of test harness re-runs"),
-              cl::init(10));
+static cl::opt<int> NumRepeat("n",
+                              cl::desc("number of basic block repititions"),
+                              cl::init(200));
+static cl::opt<int> NumRuns("r",
+                            cl::desc("maximum number of test harness re-runs"),
+                            cl::init(10));
 
 static cl::opt<int>
     PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
@@ -101,10 +65,6 @@ static cl::opt<int>
 static cl::opt<bool>
     ReadableJSON("readable-json",
                  cl::desc("export measurements to a JSON file"), cl::init(0));
-static cl::opt<bool>
-    IncludeSource("include-source",
-                  cl::desc("add source basic block to results file"),
-                  cl::init(0));
 
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
@@ -113,59 +73,6 @@ static cl::opt<std::string>
 static cl::opt<std::string>
     TripleName("triple", cl::desc("Target triple to assemble for, "
                                   "see -version for available targets"));
-
-struct Measurement {
-  uint64_t cycles;
-  uint64_t cacheMisses;
-  uint64_t contextSwitches;
-  size_t numRuns;
-};
-
-static void exportJSON(const Measurement &noise, const Measurement &workload,
-                       const std::string &source, llvm::raw_ostream &os) {
-  json res;
-  res["noise_cycles"] = noise.cycles;
-  res["noise_cache_misses"] = noise.cacheMisses;
-  res["noise_context_switches"] = noise.contextSwitches;
-  res["total_cycles"] = workload.cycles;
-  res["total_cache_misses"] = workload.cacheMisses;
-  res["total_context_switches"] = workload.contextSwitches;
-  if (noise.cycles < workload.cycles) {
-    res["measured_cycles"] = workload.cycles - noise.cycles;
-  } else {
-    res["measured_cycles"] = 0;
-  }
-  res["num_runs"] = workload.numRuns - noise.numRuns;
-  if (IncludeSource) {
-    res["source"] = source;
-  }
-
-  os << res.dump(4);
-}
-
-static void exportPBuf(const Measurement &noise, const Measurement &workload,
-                       const std::string &source, llvm::raw_ostream &os) {
-  llvm_ml::BBMetrics metrics;
-  metrics.set_noise_cycles(noise.cycles);
-  metrics.set_noise_cache_misses(noise.cacheMisses);
-  metrics.set_noise_context_switches(noise.contextSwitches);
-  metrics.set_total_cycles(workload.cycles);
-  metrics.set_total_cache_misses(workload.cacheMisses);
-  metrics.set_total_context_switches(workload.contextSwitches);
-  metrics.set_num_runs(workload.numRuns - noise.numRuns);
-  if (noise.cycles < workload.cycles) {
-    metrics.set_measured_cycles(workload.cycles - noise.cycles);
-  } else {
-    metrics.set_measured_cycles(0);
-  }
-  if (IncludeSource) {
-    metrics.set_source(source);
-  }
-
-  std::string serialized;
-  metrics.SerializeToString(&serialized);
-  os << serialized;
-}
 
 static const Target *getTarget() {
   // Figure out the target triple.
@@ -184,6 +91,83 @@ static const Target *getTarget() {
   // Update the triple name and return the found target.
   TripleName = triple.getTriple();
   return target;
+}
+
+static void createSingleTestFunction(StringRef functionName,
+                                     ArrayRef<StringRef> assembly,
+                                     int numRepeat, Module &module,
+                                     IRBuilderBase &builder,
+                                     llvm_ml::InlineAsmBuilder &inlineAsm) {
+  auto &context = module.getContext();
+
+  auto retTy = Type::getVoidTy(context);
+  auto ptrTy = PointerType::getUnqual(context);
+
+  auto funcTy = FunctionType::get(retTy, {ptrTy, ptrTy}, false);
+
+  auto funcCallee = module.getOrInsertFunction(functionName, funcTy);
+  (void)funcCallee;
+
+  auto func = module.getFunction(functionName);
+
+  auto *entry = llvm::BasicBlock::Create(context, "entry", func);
+
+  builder.SetInsertPoint(entry);
+
+  auto countersFuncTy = FunctionType::get(retTy, {ptrTy}, false);
+
+  std::string startName = ("workload_start_" + functionName).str();
+  std::string endName = ("workload_end_" + functionName).str();
+
+  auto startCallee =
+      module.getOrInsertFunction("counters_start", countersFuncTy);
+  builder.CreateCall(startCallee, {func->getArg(0)});
+
+  inlineAsm.createSaveState(builder);
+
+  inlineAsm.createBranch(builder, startName);
+  inlineAsm.createLabel(builder, startName);
+
+  auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+
+  for (int i = 0; i < numRepeat; i++) {
+    for (auto line : assembly) {
+      llvm::StringRef trimmed = line.trim();
+      if (trimmed.empty())
+        continue;
+      auto asmCallee = llvm::InlineAsm::get(
+          voidFuncTy, trimmed, "~{dirflag},~{fpsr},~{flags}", true);
+      builder.CreateCall(asmCallee);
+    }
+  }
+
+  inlineAsm.createBranch(builder, endName);
+  inlineAsm.createLabel(builder, endName);
+
+  inlineAsm.createRestoreState(builder);
+  auto stopCallee = module.getOrInsertFunction("counters_stop", countersFuncTy);
+  builder.CreateCall(stopCallee, {func->getArg(0)});
+
+  builder.CreateRetVoid();
+}
+
+static std::unique_ptr<Module>
+createTestHarness(LLVMContext &context, StringRef basicBlock,
+                  llvm_ml::InlineAsmBuilder &inlineAsm) {
+  auto module = std::make_unique<Module>("test_harness", context);
+  IRBuilder builder(context);
+
+  SmallVector<StringRef> lines;
+  basicBlock.split(lines, '\n');
+
+  int noiseRepeat = static_cast<int>(kNoiseFrac * NumRepeat);
+  createSingleTestFunction("baseline", lines, noiseRepeat, *module, builder,
+                           inlineAsm);
+
+  createSingleTestFunction("bench", lines, noiseRepeat + NumRepeat, *module,
+                           builder, inlineAsm);
+
+  return module;
 }
 
 int main(int argc, char **argv) {
@@ -238,44 +222,15 @@ int main(int argc, char **argv) {
       microbenchAsm.insert(pos, "$");
       pos += 2;
     }
-    pos = 0;
-    while (pos = microbenchAsm.find("\n", pos), pos != std::string::npos) {
-      microbenchAsm = microbenchAsm.replace(pos, 1, "\\0A");
-      pos += 3;
-    }
-  }
-
-  const auto buildInlineAsm = [&](size_t numRep) {
-    std::string inlineAsm = "call void asm sideeffect \"";
-
-    inlineAsm += mlTarget->getBenchPrologue();
-
-    for (size_t i = 0; i < numRep; i++) {
-      inlineAsm += microbenchAsm;
-    }
-    inlineAsm += mlTarget->getBenchEpilogue();
-
-    inlineAsm += "\", \"\"() #1\n";
-
-    return inlineAsm;
-  };
-
-  size_t noiseRep = static_cast<size_t>(0.1 * NumRuns);
-  std::string completeHarness = kHarnessTemplate;
-  {
-    size_t insertPos = completeHarness.find("; WORKLOAD");
-    completeHarness.insert(insertPos, buildInlineAsm(NumRuns + noiseRep));
-    insertPos = completeHarness.find("; NOISE");
-    completeHarness.insert(insertPos, buildInlineAsm(noiseRep));
   }
 
   auto llvmContext = std::make_unique<LLVMContext>();
+  auto inlineAsm = mlTarget->createInlineAsmBuilder();
 
-  SMDiagnostic error;
-  std::unique_ptr<Module> module =
-      parseAssemblyString(completeHarness, error, *llvmContext);
+  auto module = createTestHarness(*llvmContext, microbenchAsm, *inlineAsm);
+
   if (!module) {
-    errs() << "Error: " << error.getMessage() << "\n";
+    llvm::errs() << "Failed to generate test harness\n";
     return 1;
   }
 
@@ -297,12 +252,9 @@ int main(int argc, char **argv) {
       orc::ExecutorAddr::fromPtr(&counters_start), JITSymbolFlags::Exported);
   orc::ExecutorSymbolDef countersStopPtr(
       orc::ExecutorAddr::fromPtr(&counters_stop), JITSymbolFlags::Exported);
-  orc::ExecutorSymbolDef countersCyclesPtr(
-      orc::ExecutorAddr::fromPtr(&counters_cycles), JITSymbolFlags::Exported);
   cantFail(dylib.define(orc::absoluteSymbols(orc::SymbolMap({
       {mangle("counters_start"), countersStartPtr},
       {mangle("counters_stop"), countersStopPtr},
-      {mangle("counters_cycles"), countersCyclesPtr},
   }))));
 
   cantFail(jit->addIRModule(
@@ -322,73 +274,31 @@ int main(int argc, char **argv) {
   llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
   llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  Measurement noise;
-  const auto noiseCb = [&noise, noiseRep](uint64_t cycles, uint64_t cacheMisses,
-                                          uint64_t contextSwitches) {
-    noise.cycles = cycles;
-    noise.contextSwitches = contextSwitches;
-    noise.cacheMisses = cacheMisses;
-    noise.numRuns = noiseRep;
+  auto noiseResults = llvm_ml::runBenchmark(noiseFunc, PinnedCPU, NumRuns);
+  auto workloadResults = llvm_ml::runBenchmark(benchFunc, PinnedCPU, NumRuns);
+
+  const auto minEltPred = [](const auto &lhs, const auto &rhs) {
+    return lhs.numCycles < rhs.numCycles;
   };
 
-  Measurement workload;
-  const auto benchCb = [&workload, noiseRep](uint64_t cycles,
-                                             uint64_t cacheMisses,
-                                             uint64_t contextSwitches) {
-    workload.cycles = cycles;
-    workload.contextSwitches = contextSwitches;
-    workload.cacheMisses = cacheMisses;
-    workload.numRuns = noiseRep + NumRuns;
-  };
+  auto minNoise =
+      std::min_element(noiseResults.begin(), noiseResults.end(), minEltPred);
+  auto minWorkload = std::min_element(workloadResults.begin(),
+                                      workloadResults.end(), minEltPred);
 
-  {
-    auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
-    if (maybeErr) {
-      // This is a warm-up run, we don't care much
-    }
-    maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
-    if (maybeErr) {
-      // This is a warm-up run, we don't care much
-    }
-  }
-
-  auto maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
-  if (maybeErr) {
-    errs() << "Failed to measure system noise... " << maybeErr << "\n";
-    return 1;
-  }
-  Measurement takenNoise = noise;
-  for (int i = 0; i < MaxRepeat; i++) {
-    maybeErr = llvm_ml::runBenchmark(noiseFunc, noiseCb, PinnedCPU);
-    if (maybeErr) {
-      continue;
-    }
-
-    if (noise.contextSwitches == 0 && noise.cycles < takenNoise.cycles)
-      takenNoise = noise;
-  }
-  maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
-  if (maybeErr) {
-    errs() << "Child terminated abnormally... " << maybeErr << "\n";
-    return 1;
-  }
-  Measurement takenWorkload = workload;
-  for (int i = 0; i < MaxRepeat; i++) {
-    maybeErr = llvm_ml::runBenchmark(benchFunc, benchCb, PinnedCPU);
-    if (maybeErr) {
-      continue;
-    }
-
-    if (workload.contextSwitches == 0 && workload.cycles < takenWorkload.cycles)
-      takenWorkload = workload;
-  }
+  llvm_ml::Measurement m = *minWorkload - *minNoise;
+  int noiseRep = static_cast<int>(kNoiseFrac * NumRepeat);
+  m.noiseNumRuns = noiseRep;
+  m.workloadNumRuns = NumRepeat + noiseRep;
+  m.measuredNumRuns = NumRepeat;
 
   std::error_code errorCode;
   raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
   if (ReadableJSON) {
-    exportJSON(takenNoise, workload, (*buffer)->getBuffer().str(), outfile);
+    m.exportJSON(outfile, (*buffer)->getBuffer(), noiseResults,
+                 workloadResults);
   } else {
-    exportPBuf(takenNoise, workload, (*buffer)->getBuffer().str(), outfile);
+    m.exportProtobuf(outfile, (*buffer)->getBuffer());
   }
   outfile.close();
 

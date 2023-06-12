@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package llvm_ml;
 
-import "lib/structures/bb_graph.proto";
-import "lib/structures/bb_metrics.proto";
+import "lib/structures/mc_graph.proto";
+import "lib/structures/mc_metrics.proto";
 
 message MCDataPiece {
-  BBGraph graph = 1;
-  BBMetrics metrics = 2;
+  MCGraph graph = 1;
+  MCMetrics metrics = 2;
 }
 
 message MCDataset { repeated MCDataPiece data = 1; }

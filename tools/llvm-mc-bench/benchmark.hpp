@@ -1,25 +1,26 @@
 //===--- benchmark.hpp - Benchmark runner interface -------------C++-===//
+//
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include <string>
-#include <functional>
+#include "BenchmarkResult.hpp"
 
-namespace llvm {
-class Error;
-}
+#include "llvm/Support/Error.h"
+
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace llvm_ml {
 using BenchmarkFn = void (*)(void *, void *);
-using BenchmarkCb = std::function<void(uint64_t, uint64_t, uint64_t)>;
 
-llvm::Error runBenchmark(BenchmarkFn bench, const BenchmarkCb &cb,
-                         int pinnedCPU);
-} // namespace llvm_ml
+std::vector<BenchmarkResult> runBenchmark(BenchmarkFn bench, int pinnedCPU,
+                                          int numRuns);
 
-extern "C" {
-void benchmark_unmap_before(void *ptr);
-void benchmark_unmap_after(void *ptr);
+namespace detail {
+llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
+                                                   int pinnedCPU);
 }
+} // namespace llvm_ml
