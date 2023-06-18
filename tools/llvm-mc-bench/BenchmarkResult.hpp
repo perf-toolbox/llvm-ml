@@ -53,6 +53,7 @@ struct BenchmarkResult {
       0; ///< number of micro-operations retired, may be 0 on some platforms
   uint64_t numInstructions = 0; ///< number of HW instructions retired
   uint64_t numMisalignedLoads = 0;
+  uint64_t numRuns = 0;
 };
 
 inline Measurement operator-(const BenchmarkResult &wl,
@@ -75,6 +76,9 @@ inline Measurement operator-(const BenchmarkResult &wl,
   m.noiseCacheMisses = noise.numCacheMisses;
   m.noiseMicroOps = noise.numMicroOps;
   m.noiseInstructions = noise.numInstructions;
+  m.noiseNumRuns = noise.numRuns;
+  m.workloadNumRuns = wl.numRuns;
+  m.measuredNumRuns = wl.numRuns - noise.numRuns;
 
   return m;
 }

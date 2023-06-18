@@ -274,8 +274,11 @@ int main(int argc, char **argv) {
   llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
   llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
 
-  auto noiseResults = llvm_ml::runBenchmark(noiseFunc, PinnedCPU, NumRuns);
-  auto workloadResults = llvm_ml::runBenchmark(benchFunc, PinnedCPU, NumRuns);
+  int noiseRepeat = static_cast<int>(kNoiseFrac * NumRepeat);
+  auto noiseResults =
+      llvm_ml::runBenchmark(noiseFunc, PinnedCPU, NumRuns, noiseRepeat);
+  auto workloadResults = llvm_ml::runBenchmark(benchFunc, PinnedCPU, NumRuns,
+                                               noiseRepeat + NumRepeat);
 
   const auto minEltPred = [](const auto &lhs, const auto &rhs) {
     return lhs.numCycles < rhs.numCycles;

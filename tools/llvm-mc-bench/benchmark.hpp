@@ -17,7 +17,7 @@ namespace llvm_ml {
 using BenchmarkFn = void (*)(void *, void *);
 
 std::vector<BenchmarkResult> runBenchmark(BenchmarkFn bench, int pinnedCPU,
-                                          int numRuns);
+                                          int numRuns, int numRep);
 
 namespace detail {
 llvm::Expected<BenchmarkResult> runSingleBenchmark(BenchmarkFn bench,
