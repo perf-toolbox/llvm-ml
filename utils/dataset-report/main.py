@@ -88,7 +88,7 @@ def get_fig_data(piece):
     source_str = '\n'.join(source_lines)
     source_str += "\n"
 
-    measured_cycles = f"Measured cycles: {piece.metrics.measured_cycles / piece.metrics.num_runs}"
+    measured_cycles = f"Measured cycles: {piece.metrics.measured_cycles / piece.metrics.measured_num_runs}"
     cache_misses = f"Cache misses: {piece.metrics.total_cache_misses}"
     context_switches = f"Context switches: {piece.metrics.total_context_switches}"
 
@@ -168,7 +168,7 @@ for d in tqdm(dataset.data):
             colored_nodes.append(blended_color)
     
     graph = convert_graph(d.graph)
-    cycles.append(d.metrics.measured_cycles / getattr(d.metrics, 'num_runs', 1000))
+    cycles.append(d.metrics.measured_cycles / getattr(d.metrics, 'measured_num_runs', 200))
     # diameters.append(nx.diameter(graph))
 
 # with open(os.path.join(args.output, 'graph_stats.md'), 'w') as f:
