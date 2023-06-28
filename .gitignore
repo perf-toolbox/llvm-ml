@@ -3,3 +3,4 @@ external
 user.bazelrc
 compile_commands.json
 .DS_Store
+.vscode
