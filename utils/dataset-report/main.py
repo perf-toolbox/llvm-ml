@@ -89,8 +89,8 @@ def get_fig_data(piece):
     source_str += "\n"
 
     measured_cycles = f"Measured cycles: {piece.metrics.measured_cycles / piece.metrics.measured_num_runs}"
-    cache_misses = f"Cache misses: {piece.metrics.total_cache_misses}"
-    context_switches = f"Context switches: {piece.metrics.total_context_switches}"
+    cache_misses = f"Cache misses: {getattr(piece.metrics, 'total_cache_misses', 0)}"
+    context_switches = f"Context switches: {getattr(piece.metrics, 'total_context_switches', 0)}"
 
 
     return '\n'.join([source_str, measured_cycles, cache_misses, context_switches])
@@ -209,6 +209,11 @@ for i in range(5):
     filename = os.path.join(args.output, 'graph-%d.png' % (i + 1))
 
     plot_graph(graph, node_colors, source_str, filename)
+
+    asm_filename = os.path.join(args.output, f"asm-{i + 1}.s")
+    f = open(asm_filename, 'w')
+    f.write(source_str)
+    f.close()
 
 
 longest_piece = dataset.data[np.argmax(cycles)]
