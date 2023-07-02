@@ -14,7 +14,6 @@
 #include <vector>
 
 namespace llvm_ml {
-using BenchmarkFn = void (*)(void *, void *);
 
 std::vector<BenchmarkResult> runBenchmark(BenchmarkFn bench, int pinnedCPU,
                                           int numRuns, int numRep);

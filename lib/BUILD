@@ -33,7 +33,7 @@ cc_library(
         "target/Target.hpp"
     ],
     include_prefix = "llvm-ml",
-    visibility = ["//tools:__pkg__"],
+    visibility = ["//tools:__pkg__", "//utils:__pkg__"],
     deps = [
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:MC",

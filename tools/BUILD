@@ -1,16 +1,23 @@
-cc_binary(
-    name = "llvm-mc-bench",
-    srcs = [
-      "llvm-mc-bench/llvm-mc-bench.cpp",
+cc_library(
+    name = "llvm-mc-bench-lib",
+    hdrs = [
       "llvm-mc-bench/counters.hpp",
       "llvm-mc-bench/benchmark.hpp",
-      "llvm-mc-bench/benchmark.cpp",
       "llvm-mc-bench/BenchmarkResult.hpp",
+      "llvm-mc-bench/BenchmarkRunner.hpp",
+      "llvm-mc-bench/BenchmarkGenerator.hpp",
+    ],
+    srcs = [
+      "llvm-mc-bench/counters.hpp",
+      "llvm-mc-bench/BenchmarkResult.hpp",
+      "llvm-mc-bench/BenchmarkRunner.hpp",
       "llvm-mc-bench/BenchmarkResult.cpp",
+      "llvm-mc-bench/BenchmarkGenerator.hpp",
+      "llvm-mc-bench/BenchmarkGenerator.cpp",
     ] + select({
       "@platforms//os:linux": [
         "llvm-mc-bench/counters_linux.cpp",
-        "llvm-mc-bench/benchmark_linux.cpp"
+        "llvm-mc-bench/cpu_benchmark_runner_linux.cpp",
       ],
       "//conditions:default": [],
     }),
@@ -20,6 +27,25 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
+      "@nlohmann_json//:json",
+      "@//lib:target",
+      "@//lib:cpp_structures_proto",
+    ] + select({
+      "@platforms//os:linux": [
+        "//third_party:libpfm",
+      ],
+      "//conditions:default": [],
+    }),
+    visibility = ["//tools:__pkg__", "//utils:__pkg__"],
+)
+
+cc_binary(
+    name = "llvm-mc-bench",
+    srcs = [
+      "llvm-mc-bench/llvm-mc-bench.cpp",
+    ],
+    deps = [
+      "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",

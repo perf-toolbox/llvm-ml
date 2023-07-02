@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "benchmark.hpp"
+#include "BenchmarkGenerator.hpp"
+#include "BenchmarkRunner.hpp"
 #include "counters.hpp"
 #include "llvm-ml/target/Target.hpp"
 
@@ -41,8 +42,6 @@
 #include "llvm/TargetParser/Host.h"
 
 using namespace llvm;
-
-inline constexpr float kNoiseFrac = 0.1f;
 
 static mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -93,84 +92,9 @@ static const Target *getTarget() {
   return target;
 }
 
-static void createSingleTestFunction(StringRef functionName,
-                                     ArrayRef<StringRef> assembly,
-                                     int numRepeat, Module &module,
-                                     IRBuilderBase &builder,
-                                     llvm_ml::InlineAsmBuilder &inlineAsm) {
-  auto &context = module.getContext();
-
-  auto retTy = Type::getVoidTy(context);
-  auto ptrTy = PointerType::getUnqual(context);
-
-  auto funcTy = FunctionType::get(retTy, {ptrTy, ptrTy}, false);
-
-  auto funcCallee = module.getOrInsertFunction(functionName, funcTy);
-  (void)funcCallee;
-
-  auto func = module.getFunction(functionName);
-
-  auto *entry = llvm::BasicBlock::Create(context, "entry", func);
-
-  builder.SetInsertPoint(entry);
-
-  auto countersFuncTy = FunctionType::get(retTy, {ptrTy}, false);
-
-  std::string startName = ("workload_start_" + functionName).str();
-  std::string endName = ("workload_end_" + functionName).str();
-
-  auto startCallee =
-      module.getOrInsertFunction("counters_start", countersFuncTy);
-  builder.CreateCall(startCallee, {func->getArg(0)});
-
-  inlineAsm.createSaveState(builder);
-
-  inlineAsm.createBranch(builder, startName);
-  inlineAsm.createLabel(builder, startName);
-
-  auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
-
-  for (int i = 0; i < numRepeat; i++) {
-    for (auto line : assembly) {
-      llvm::StringRef trimmed = line.trim();
-      if (trimmed.empty())
-        continue;
-      auto asmCallee = llvm::InlineAsm::get(
-          voidFuncTy, trimmed, "~{dirflag},~{fpsr},~{flags}", true);
-      builder.CreateCall(asmCallee);
-    }
-  }
-
-  inlineAsm.createBranch(builder, endName);
-  inlineAsm.createLabel(builder, endName);
-
-  inlineAsm.createRestoreState(builder);
-  auto stopCallee = module.getOrInsertFunction("counters_stop", countersFuncTy);
-  builder.CreateCall(stopCallee, {func->getArg(0)});
-
-  builder.CreateRetVoid();
-}
-
-static std::unique_ptr<Module>
-createTestHarness(LLVMContext &context, StringRef basicBlock,
-                  llvm_ml::InlineAsmBuilder &inlineAsm) {
-  auto module = std::make_unique<Module>("test_harness", context);
-  IRBuilder builder(context);
-
-  SmallVector<StringRef> lines;
-  basicBlock.split(lines, '\n');
-
-  int noiseRepeat = static_cast<int>(kNoiseFrac * NumRepeat);
-  createSingleTestFunction("baseline", lines, noiseRepeat, *module, builder,
-                           inlineAsm);
-
-  createSingleTestFunction("bench", lines, noiseRepeat + NumRepeat, *module,
-                           builder, inlineAsm);
-
-  return module;
-}
-
 int main(int argc, char **argv) {
+  llvm::ExitOnError exitOnErr;
+
   InitLLVM x(argc, argv);
 
   InitializeAllTargetInfos();
@@ -194,6 +118,7 @@ int main(int argc, char **argv) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> buffer =
       MemoryBuffer::getFileOrSTDIN(InputFilename, /*IsText=*/true);
   if (std::error_code EC = buffer.getError()) {
+    llvm::errs() << "Failed to open input file " << InputFilename << "\n";
     return 1;
   }
 
@@ -214,26 +139,22 @@ int main(int argc, char **argv) {
 
   auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
 
-  // Prepare asm string
-  {
-    size_t pos = 0;
-
-    while (pos = microbenchAsm.find("$", pos), pos != std::string::npos) {
-      microbenchAsm.insert(pos, "$");
-      pos += 2;
-    }
-  }
-
   auto llvmContext = std::make_unique<LLVMContext>();
   auto inlineAsm = mlTarget->createInlineAsmBuilder();
 
-  auto module = createTestHarness(*llvmContext, microbenchAsm, *inlineAsm);
+  auto module = llvm_ml::createCPUTestHarness(*llvmContext, microbenchAsm,
+                                              NumRepeat, *inlineAsm);
 
   if (!module) {
     llvm::errs() << "Failed to generate test harness\n";
     return 1;
   }
 
+  auto runner = llvm_ml::createCPUBenchmarkRunner(target, TripleName,
+                                                  std::move(module), 0, 0);
+  exitOnErr(runner->run());
+
+  /*
   auto JTMB = orc::JITTargetMachineBuilder::detectHost();
 
   if (!JTMB)
@@ -304,6 +225,7 @@ int main(int argc, char **argv) {
     m.exportProtobuf(outfile, (*buffer)->getBuffer());
   }
   outfile.close();
+  */
 
   return 0;
 }
