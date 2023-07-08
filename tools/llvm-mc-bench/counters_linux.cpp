@@ -143,62 +143,6 @@ public:
       ioctl(mlFd.fd, PERF_EVENT_IOC_ID, &mlFd.id);
       mDescriptors.push_back(mlFd);
     }
-    /*
-    if (pfm_get_os_event_encoding("UOPS_RETIRED:ALL", PFM_PLM0 | PFM_PLM3,
-                                  PFM_OS_PERF_EVENT_EXT, &arg) == PFM_SUCCESS) {
-      memset(&pea, 0, sizeof(struct perf_event_attr));
-      pea.type = PERF_TYPE_RAW;
-      pea.size = sizeof(struct perf_event_attr);
-      pea.config = arg.idx;
-      pea.sample_period = 0;
-      pea.sample_type = PERF_SAMPLE_READ;
-      pea.wakeup_events = 1;
-      pea.disabled = 1;
-      pea.exclude_kernel = 1;
-      pea.exclude_hv = 1;
-      pea.exclude_idle = 1;
-      pea.read_format = PERF_FORMAT_GROUP | PERF_FORMAT_ID;
-
-      CounterFd uopsFd;
-      uopsFd.type = Counter::MicroOps;
-      uopsFd.fd = syscall(__NR_perf_event_open, &pea, 0, -1, baseFd.fd, 0);
-      if (uopsFd.fd == -1) {
-        llvm::errs() << "Error opening uops fd\n";
-        std::terminate();
-      }
-      ioctl(uopsFd.fd, PERF_EVENT_IOC_ID, &uopsFd.id);
-      mDescriptors.push_back(uopsFd);
-    } else if (pfm_get_os_event_encoding("RETIRED_UOPS", PFM_PLM0 | PFM_PLM3,
-                                         PFM_OS_PERF_EVENT_EXT,
-                                         &arg) == PFM_SUCCESS) {
-      memset(&pea, 0, sizeof(struct perf_event_attr));
-      pea.type = PERF_TYPE_RAW;
-      pea.size = sizeof(struct perf_event_attr);
-      pea.config = arg.idx;
-      pea.sample_period = 0;
-      pea.sample_type = PERF_SAMPLE_READ;
-      pea.wakeup_events = 1;
-      pea.disabled = 1;
-      pea.exclude_kernel = 1;
-      pea.exclude_hv = 1;
-      pea.exclude_idle = 1;
-      pea.read_format = PERF_FORMAT_GROUP | PERF_FORMAT_ID;
-
-      CounterFd uopsFd;
-      uopsFd.type = Counter::MicroOps;
-      uopsFd.fd = syscall(__NR_perf_event_open, &pea, 0, -1, baseFd.fd, 0);
-      if (uopsFd.fd == -1) {
-        llvm::errs() << "Error opening uops fd\n";
-        std::terminate();
-      }
-      result = ioctl(uopsFd.fd, PERF_EVENT_IOC_ID, &uopsFd.id);
-      if (result == -1) {
-        perror("Error opening uops");
-        std::terminate();
-      }
-      mDescriptors.push_back(uopsFd);
-    }
-    */
 
     memset(&pea, 0, sizeof(struct perf_event_attr));
     pea.type = PERF_TYPE_HW_CACHE;

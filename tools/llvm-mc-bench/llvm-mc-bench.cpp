@@ -4,6 +4,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "BenchmarkGenerator.hpp"
+#include "BenchmarkResult.hpp"
 #include "BenchmarkRunner.hpp"
 #include "counters.hpp"
 #include "llvm-ml/target/Target.hpp"
@@ -150,56 +151,17 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  auto runner = llvm_ml::createCPUBenchmarkRunner(target, TripleName,
-                                                  std::move(module), 0, 0);
+  size_t noiseRepeat = static_cast<size_t>(llvm_ml::kNoiseFrac * NumRepeat);
+
+  auto runner = llvm_ml::createCPUBenchmarkRunner(
+      target, TripleName, std::move(module), noiseRepeat,
+      noiseRepeat + NumRepeat, NumRuns);
   exitOnErr(runner->run());
 
-  /*
-  auto JTMB = orc::JITTargetMachineBuilder::detectHost();
-
-  if (!JTMB)
-    return 1;
-
-  auto DL = JTMB->getDefaultDataLayoutForTarget();
-  if (!DL)
-    return 1;
-
-  auto jit = cantFail(orc::LLJITBuilder().create());
-
-  orc::MangleAndInterner mangle(jit->getExecutionSession(), *DL);
-
-  auto &dylib = jit->getMainJITDylib();
-  orc::ExecutorSymbolDef countersStartPtr(
-      orc::ExecutorAddr::fromPtr(&counters_start), JITSymbolFlags::Exported);
-  orc::ExecutorSymbolDef countersStopPtr(
-      orc::ExecutorAddr::fromPtr(&counters_stop), JITSymbolFlags::Exported);
-  cantFail(dylib.define(orc::absoluteSymbols(orc::SymbolMap({
-      {mangle("counters_start"), countersStartPtr},
-      {mangle("counters_stop"), countersStopPtr},
-  }))));
-
-  cantFail(jit->addIRModule(
-      orc::ThreadSafeModule(std::move(module), std::move(llvmContext))));
-
-  auto benchSymbol = jit->lookup("bench");
-  if (!benchSymbol) {
-    errs() << "Error: " << toString(benchSymbol.takeError()) << "\n";
-    return 1;
-  }
-  auto noiseSymbol = jit->lookup("baseline");
-  if (!noiseSymbol) {
-    errs() << "Error: " << toString(noiseSymbol.takeError()) << "\n";
-    return 1;
-  }
-
-  llvm_ml::BenchmarkFn benchFunc = benchSymbol->toPtr<llvm_ml::BenchmarkFn>();
-  llvm_ml::BenchmarkFn noiseFunc = noiseSymbol->toPtr<llvm_ml::BenchmarkFn>();
-
-  int noiseRepeat = static_cast<int>(kNoiseFrac * NumRepeat);
-  auto noiseResults =
-      llvm_ml::runBenchmark(noiseFunc, PinnedCPU, NumRuns, noiseRepeat);
-  auto workloadResults = llvm_ml::runBenchmark(benchFunc, PinnedCPU, NumRuns,
-                                               noiseRepeat + NumRepeat);
+  llvm::ArrayRef<llvm_ml::BenchmarkResult> noiseResults =
+      runner->getNoiseResults();
+  llvm::ArrayRef<llvm_ml::BenchmarkResult> workloadResults =
+      runner->getWorkloadResults();
 
   const auto minEltPred = [](const auto &lhs, const auto &rhs) {
     return lhs.numCycles < rhs.numCycles;
@@ -211,9 +173,8 @@ int main(int argc, char **argv) {
                                       workloadResults.end(), minEltPred);
 
   llvm_ml::Measurement m = *minWorkload - *minNoise;
-  int noiseRep = static_cast<int>(kNoiseFrac * NumRepeat);
-  m.noiseNumRuns = noiseRep;
-  m.workloadNumRuns = NumRepeat + noiseRep;
+  m.noiseNumRuns = noiseRepeat;
+  m.workloadNumRuns = NumRepeat + noiseRepeat;
   m.measuredNumRuns = NumRepeat;
 
   std::error_code errorCode;
@@ -225,7 +186,6 @@ int main(int argc, char **argv) {
     m.exportProtobuf(outfile, (*buffer)->getBuffer());
   }
   outfile.close();
-  */
 
   return 0;
 }
