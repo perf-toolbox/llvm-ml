@@ -48,5 +48,5 @@ cc_library(
   }),
   linkstatic = True,
   strip_include_prefix = "libpfm4/include",
-  visibility = ["//tools:__pkg__"],
+  visibility = ["//tools:__pkg__", "//utils:__pkg__"],
 )

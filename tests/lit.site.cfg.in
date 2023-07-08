@@ -1,0 +1,50 @@
+@LIT_SITE_CFG_IN_HEADER@
+
+import sys
+
+# Allow generated file to be relocatable.
+from pathlib import Path
+
+
+def path(p):
+  if not p: return ''
+  return str((Path(__file__).parent / p).resolve())
+
+
+config.host_triple = "@LLVM_HOST_TRIPLE@"
+config.target_triple = "@LLVM_TARGET_TRIPLE@"
+config.llvm_src_root = path("../../" + r"@LLVM_SOURCE_DIR@")
+config.llvm_ml_src_root = path(r"@LLVM_ML_SOURCE_DIR@")
+config.llvm_ml_obj_root = path(r"../../")
+config.llvm_ml_tools_root = path("../../" + r"@LLVM_ML_TOOLS_DIR@")
+config.llvm_ml_utils_root = path("../../" + r"@LLVM_ML_UTILS_DIR@")
+config.llvm_obj_root = path("../../" + r"@LLVM_BINARY_DIR@")
+config.llvm_tools_dir = lit_config.substitute(path("../../" + r"@LLVM_TOOLS_DIR@"))
+config.llvm_lib_dir = lit_config.substitute(path("../../" + r"@LLVM_LIBS_DIR@"))
+config.llvm_shlib_dir = lit_config.substitute(path(r"@SHLIBDIR@"))
+config.llvm_shlib_ext = "@SHLIBEXT@"
+config.llvm_plugin_ext = "@LLVM_PLUGIN_EXT@"
+config.llvm_exe_ext = "@EXEEXT@"
+config.lit_tools_dir = path(r"@LLVM_LIT_TOOLS_DIR@")
+config.python_executable = "@Python3_EXECUTABLE@"
+config.gold_executable = "@GOLD_EXECUTABLE@"
+config.ld64_executable = "@LD64_EXECUTABLE@"
+config.osx_sysroot = path(r"@CMAKE_OSX_SYSROOT@")
+config.ocamlfind_executable = "@OCAMLFIND@"
+config.targets_to_build = "@TARGETS_TO_BUILD@"
+config.native_target = "@LLVM_NATIVE_ARCH@"
+config.llvm_bindings = "@LLVM_BINDINGS@".split(' ')
+config.host_os = "@HOST_OS@"
+config.host_cc = "@HOST_CC@"
+config.host_cxx = "@HOST_CXX@"
+# Note: ldflags can contain double-quoted paths, so must use single quotes here.
+config.host_ldflags = '@HOST_LDFLAGS@'
+config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
+config.host_arch = "@HOST_ARCH@"
+
+import lit.llvm
+lit.llvm.initialize(lit_config, config)
+
+# Let the main config do the real work.
+lit_config.load_config(
+    config, os.path.join(config.llvm_ml_src_root, "tests/lit.cfg.py"))
