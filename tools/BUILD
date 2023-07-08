@@ -2,7 +2,6 @@ cc_library(
     name = "llvm-mc-bench-lib",
     hdrs = [
       "llvm-mc-bench/counters.hpp",
-      "llvm-mc-bench/benchmark.hpp",
       "llvm-mc-bench/BenchmarkResult.hpp",
       "llvm-mc-bench/BenchmarkRunner.hpp",
       "llvm-mc-bench/BenchmarkGenerator.hpp",
