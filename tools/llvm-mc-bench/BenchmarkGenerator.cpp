@@ -55,6 +55,8 @@ static void createSingleCPUTestFunction(StringRef functionName,
       llvm::StringRef trimmed = line.trim();
       if (trimmed.empty())
         continue;
+      if (trimmed.startswith(";"))
+        continue;
       auto asmCallee = llvm::InlineAsm::get(
           voidFuncTy, trimmed, "~{dirflag},~{fpsr},~{flags}", true);
       builder.CreateCall(asmCallee);
@@ -74,7 +76,8 @@ static void createSingleCPUTestFunction(StringRef functionName,
 namespace llvm_ml {
 std::unique_ptr<Module>
 createCPUTestHarness(LLVMContext &context, std::string microbenchAsm,
-                     int numRepeat, llvm_ml::InlineAsmBuilder &inlineAsm) {
+                     int numRepeatNoise, int numRepeat,
+                     llvm_ml::InlineAsmBuilder &inlineAsm) {
   // Prepare asm string
   {
     size_t pos = 0;
@@ -92,12 +95,11 @@ createCPUTestHarness(LLVMContext &context, std::string microbenchAsm,
   SmallVector<StringRef> lines;
   basicBlock.split(lines, '\n');
 
-  int noiseRepeat = static_cast<int>(kNoiseFrac * numRepeat);
-  createSingleCPUTestFunction(kBaselineNoiseName, lines, noiseRepeat, *module,
-                              builder, inlineAsm);
-
-  createSingleCPUTestFunction(kWorkloadName, lines, noiseRepeat + numRepeat,
+  createSingleCPUTestFunction(kBaselineNoiseName, lines, numRepeatNoise,
                               *module, builder, inlineAsm);
+
+  createSingleCPUTestFunction(kWorkloadName, lines, numRepeat, *module, builder,
+                              inlineAsm);
 
   return module;
 }

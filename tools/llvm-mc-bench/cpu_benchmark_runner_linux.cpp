@@ -181,6 +181,8 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     }
   });
 
+  std::this_thread::yield();
+
   fn(counters.get(), reinterpret_cast<void *>(&counters_start),
      reinterpret_cast<void *>(&counters_stop), out);
 

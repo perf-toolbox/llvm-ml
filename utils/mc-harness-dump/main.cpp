@@ -21,9 +21,13 @@ using namespace llvm;
 static cl::opt<std::string>
     InputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
 
-static cl::opt<int> NumRepeat("n",
+static cl::opt<int> NumRepeat("num-repeat",
                               cl::desc("number of basic block repititions"),
                               cl::init(200));
+static cl::opt<int> NumRepeatNoise(
+    "num-repeat-noise",
+    cl::desc("number of basic block repititions for noise measurement"),
+    cl::init(10));
 
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
@@ -90,8 +94,8 @@ int main(int argc, char **argv) {
   auto llvmContext = std::make_unique<LLVMContext>();
   auto inlineAsm = mlTarget->createInlineAsmBuilder();
 
-  auto module = llvm_ml::createCPUTestHarness(*llvmContext, microbenchAsm,
-                                              NumRepeat, *inlineAsm);
+  auto module = llvm_ml::createCPUTestHarness(
+      *llvmContext, microbenchAsm, NumRepeatNoise, NumRepeat, *inlineAsm);
 
   if (!module) {
     llvm::errs() << "Failed to generate test harness\n";

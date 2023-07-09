@@ -51,12 +51,18 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> OutputFilename("o", cl::desc("output file"),
                                            cl::init("-"));
-static cl::opt<int> NumRepeat("n",
-                              cl::desc("number of basic block repititions"),
-                              cl::init(200));
+static cl::opt<int>
+    NumRepeat("num-repeat",
+              cl::desc("number of basic block repititions for benchmark run"),
+              cl::init(200));
+static cl::opt<int> NumRepeatNoise(
+    "num-repeat-noise",
+    cl::desc("number of basic block repititions for noise measurement"),
+    cl::init(10));
+
 static cl::opt<int> NumRuns("r",
                             cl::desc("maximum number of test harness re-runs"),
-                            cl::init(10));
+                            cl::init(50));
 
 static cl::opt<int>
     PinnedCPU("c", cl::desc("id of the CPU core to pin this process to"),
@@ -143,19 +149,17 @@ int main(int argc, char **argv) {
   auto llvmContext = std::make_unique<LLVMContext>();
   auto inlineAsm = mlTarget->createInlineAsmBuilder();
 
-  auto module = llvm_ml::createCPUTestHarness(*llvmContext, microbenchAsm,
-                                              NumRepeat, *inlineAsm);
+  auto module = llvm_ml::createCPUTestHarness(
+      *llvmContext, microbenchAsm, NumRepeatNoise, NumRepeat, *inlineAsm);
 
   if (!module) {
     llvm::errs() << "Failed to generate test harness\n";
     return 1;
   }
 
-  size_t noiseRepeat = static_cast<size_t>(llvm_ml::kNoiseFrac * NumRepeat);
-
   auto runner = llvm_ml::createCPUBenchmarkRunner(
-      target, TripleName, std::move(module), PinnedCPU, noiseRepeat,
-      noiseRepeat + NumRepeat, NumRuns);
+      target, TripleName, std::move(module), PinnedCPU, NumRepeatNoise,
+      NumRepeat, NumRuns);
   exitOnErr(runner->run());
 
   llvm::ArrayRef<llvm_ml::BenchmarkResult> noiseResults =
@@ -173,9 +177,9 @@ int main(int argc, char **argv) {
                                       workloadResults.end(), minEltPred);
 
   llvm_ml::Measurement m = *minWorkload - minNoise;
-  m.noiseNumRuns = noiseRepeat;
-  m.workloadNumRuns = NumRepeat + noiseRepeat;
-  m.measuredNumRuns = NumRepeat;
+  m.noiseNumRuns = NumRepeatNoise;
+  m.workloadNumRuns = NumRepeat;
+  m.measuredNumRuns = NumRepeat - NumRepeatNoise;
 
   std::error_code errorCode;
   raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);

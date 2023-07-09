@@ -10,7 +10,6 @@
 #include <string>
 
 namespace llvm_ml {
-inline constexpr float kNoiseFrac = 0.2f;
 inline constexpr auto kBaselineNoiseName = "baseline";
 inline constexpr auto kWorkloadName = "workload";
 
@@ -29,5 +28,6 @@ using BenchmarkFn = void (*)(void *, void *, void *, void *);
 
 std::unique_ptr<llvm::Module>
 createCPUTestHarness(llvm::LLVMContext &context, std::string basicBlock,
-                     int numRepeat, llvm_ml::InlineAsmBuilder &inlineAsm);
+                     int numRepeatNoise, int numRepeat,
+                     llvm_ml::InlineAsmBuilder &inlineAsm);
 } // namespace llvm_ml
