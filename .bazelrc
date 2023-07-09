@@ -33,6 +33,10 @@ build:lld --linkopt=-fuse-ld=lld --host_linkopt=-fuse-ld=lld
 
 build:generic_clang --repo_env=CC=clang
 
+build:ci --config=mold
+build:ci -c fastbuild
+build:ci --disk_cache=./bzl-cache
+
 # Include user defines
 # It's a good practice to put something like 
 try-import %workspace%/user.bazelrc
