@@ -171,12 +171,12 @@ int main(int argc, char **argv) {
     return lhs.numCycles < rhs.numCycles;
   };
 
-  auto minNoise = llvm_ml::avg(noiseResults);
-  // std::max_element(noiseResults.begin(), noiseResults.end(), minEltPred);
+  auto minNoise =
+      std::min_element(noiseResults.begin(), noiseResults.end(), minEltPred);
   auto minWorkload = std::min_element(workloadResults.begin(),
                                       workloadResults.end(), minEltPred);
 
-  llvm_ml::Measurement m = *minWorkload - minNoise;
+  llvm_ml::Measurement m = *minWorkload - *minNoise;
   m.noiseNumRuns = NumRepeatNoise;
   m.workloadNumRuns = NumRepeat;
   m.measuredNumRuns = NumRepeat - NumRepeatNoise;
