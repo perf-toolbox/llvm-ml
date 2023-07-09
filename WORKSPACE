@@ -26,14 +26,6 @@ http_archive(
     strip_prefix = "rules_boost-986d23f0fac5e331e54941dfecc1aa3a9a86e543",
     sha256 = "4d663a55f42fc16517b37d9af116413606fef0d970441217e9eeba0ab941a61f",
 )
-http_archive(
-    name = "rules_proto",
-    sha256 = "dc3fb206a2cb3441b485eb1e423165b231235a1ea9b031b4433cf7bc1fa460dd",
-    strip_prefix = "rules_proto-5.3.0-21.7",
-    urls = [
-        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/5.3.0-21.7.tar.gz",
-    ],
-)
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
@@ -45,13 +37,6 @@ http_archive(
     sha256 = "7f6ebb62298694d8cf3ecaed81b3bb48de559819ac1909d4055abdc8c0ae1000",
 )
 
-http_archive(
-    name = "rules_python",
-    sha256 = "94750828b18044533e98a129003b6a68001204038dc4749f40b195b24c38f49f",
-    strip_prefix = "rules_python-0.21.0",
-    url = "https://github.com/bazelbuild/rules_python/releases/download/0.21.0/rules_python-0.21.0.tar.gz",
-)
-
 git_repository(
   name = "nlohmann_json",
   commit = "bbe337c3a30d5f6eea418b4aee399525536de37a",
@@ -61,16 +46,9 @@ git_repository(
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
-load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-rules_foreign_cc_dependencies()
+#load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
+#rules_foreign_cc_dependencies()
 
-load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
-rules_proto_dependencies()
-rules_proto_toolchains()
-
-load("@rules_python//python:repositories.bzl", "py_repositories")
-
-py_repositories()
 # Hack for broken zstd support
 new_local_repository(
   name = "llvm_zstd",
@@ -91,9 +69,17 @@ local_patched_repository(
 
 load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
 
+http_archive(
+    name = "llvm_zlib",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:zlib-ng.BUILD",
+    sha256 = "e36bb346c00472a1f9ff2a0a4643e590a254be6379da7cddd9daeb9a7f296731",
+    strip_prefix = "zlib-ng-2.0.7",
+    url = "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.0.7.zip",
+)
+
 llvm_configure(
   name = "llvm-project",
-  repo_mapping = {"@llvm_zlib": "@zlib"},
+  # repo_mapping = {"@llvm_zlib": "@zlib"},
   targets = [
         "AArch64",
         "X86",
