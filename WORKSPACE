@@ -79,10 +79,14 @@ new_local_repository(
   path="third_party/zstd_fake"
 )
 
-new_local_repository(
+load("//bazel:local_patched_repository.bzl", "local_patched_repository")
+
+local_patched_repository(
     name = "llvm-raw",
     build_file_content = "# empty",
     path = "third_party/llvm-project",
+    patches = ["//patches:llvm.patch"],
+    patch_args = ["-p1", "--verbose"],
 )
 
 load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
@@ -95,16 +99,6 @@ llvm_configure(
         "X86",
   ],
 )
-
-load("@llvm-raw//utils/bazel:terminfo.bzl", "llvm_terminfo_system")
-
-# We require successful detection and use of a system terminfo library.
-llvm_terminfo_system(name = "llvm_terminfo")
-
-load("@llvm-raw//utils/bazel:zlib.bzl", "llvm_zlib_system")
-
-# We require successful detection and use of a system zlib library.
-llvm_zlib_system(name = "zlib")
 
 load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
 boost_deps()

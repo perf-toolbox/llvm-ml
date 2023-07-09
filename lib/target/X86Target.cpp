@@ -264,7 +264,7 @@ public:
   bool isPush(const llvm::MCInst &inst) override {
     unsigned opcode = inst.getOpcode();
 
-    return opcode >= llvm::X86::PUSH16i8 && opcode <= llvm::X86::PUSHi32; 
+    return opcode >= llvm::X86::PUSH16i && opcode <= llvm::X86::PUSHSS32; 
   }
 
   bool isPop(const llvm::MCInst &inst) override {

@@ -3,8 +3,13 @@
 # considerably.
 build --force_pic
 
-# Build with C++17
-build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+# Build with C++20
+# TODO This currently only works with Clang. Uplift LLVM when a fix for gcc
+# lands. 
+build --cxxopt=-std=c++20 --host_cxxopt=-std=c++20
+
+# Disable build of both shared and static libs
+build --dynamic_mode=off
 
 # Prevent invalid caching if input files are modified during a build.
 build --experimental_guard_against_concurrent_changes
@@ -12,13 +17,19 @@ build --experimental_guard_against_concurrent_changes
 # Add layering check to all projects.
 build --features=layering_check
 
-build --experimental_guard_against_concurrent_changes
 build --incompatible_dont_enable_host_nonhost_crosstool_features=false
 build --per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
+build --per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
+build --host_per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
 
 build:debug --strip=never
-build:debug --cxxopt=-g --copt=-g
+build:debug -c dbg
+
+build:mold --linkopt=-fuse-ld=mold --host_linkopt=-fuse-ld=mold
+build:lld --linkopt=-fuse-ld=lld --host_linkopt=-fuse-ld=lld
+
+build:generic_clang --repo_env=CC=clang
 
 # Include user defines
 # It's a good practice to put something like 
