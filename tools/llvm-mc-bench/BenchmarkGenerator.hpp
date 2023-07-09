@@ -10,7 +10,7 @@
 #include <string>
 
 namespace llvm_ml {
-inline constexpr float kNoiseFrac = 0.1f;
+inline constexpr float kNoiseFrac = 0.2f;
 inline constexpr auto kBaselineNoiseName = "baseline";
 inline constexpr auto kWorkloadName = "workload";
 

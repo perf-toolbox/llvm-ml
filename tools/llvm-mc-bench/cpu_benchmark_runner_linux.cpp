@@ -37,11 +37,11 @@ namespace {
 class CPUBenchmarkRunner : public BenchmarkRunner {
 public:
   CPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                     std::unique_ptr<llvm::Module> module, int repeatNoise,
-                     int repeatWorkload, int numRuns)
+                     std::unique_ptr<llvm::Module> module, int pinnedCPU,
+                     size_t repeatNoise, size_t repeatWorkload, int numRuns)
       : mTarget(target), mTripleName(tripleName), mModule(std::move(module)),
-        mRepeatNoise(repeatNoise), mRepeatWorkload(repeatWorkload),
-        mNumRuns(numRuns) {}
+        mPinnedCPU(pinnedCPU), mRepeatNoise(repeatNoise),
+        mRepeatWorkload(repeatWorkload), mNumRuns(numRuns) {}
 
   llvm::Error run() override;
 
@@ -57,8 +57,9 @@ private:
   const llvm::Target *mTarget;
   llvm::StringRef mTripleName;
   std::unique_ptr<llvm::Module> mModule;
-  int mRepeatNoise;
-  int mRepeatWorkload;
+  int mPinnedCPU;
+  size_t mRepeatNoise;
+  size_t mRepeatWorkload;
   int mNumRuns;
   llvm::SmallVector<llvm_ml::BenchmarkResult> mNoiseResults;
   llvm::SmallVector<llvm_ml::BenchmarkResult> mWorkloadResults;
@@ -156,6 +157,8 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
       llvm::errs() << "Failed to map address\n";
       abort();
     }
+
+    __builtin_prefetch(addr, 0, 0);
   }
 
   auto counters = createCounters([out](llvm::ArrayRef<CounterValue> values) {
@@ -357,9 +360,17 @@ llvm::Error CPUBenchmarkRunner::run() {
     return llvm::Error::success();
   };
 
-  if (auto err = runBenchmark(llvm_ml::kBaselineNoiseName, 1, mNoiseResults))
+  // Warmup run
+  {
+    llvm::SmallVector<llvm_ml::BenchmarkResult> temp;
+    if (auto err = runBenchmark(llvm_ml::kBaselineNoiseName, mPinnedCPU, temp))
+      return err;
+  }
+  if (auto err =
+          runBenchmark(llvm_ml::kBaselineNoiseName, mPinnedCPU, mNoiseResults))
     return err;
-  if (auto err = runBenchmark(llvm_ml::kWorkloadName, 1, mWorkloadResults))
+  if (auto err =
+          runBenchmark(llvm_ml::kWorkloadName, mPinnedCPU, mWorkloadResults))
     return err;
 
   return llvm::Error::success();
@@ -368,12 +379,12 @@ llvm::Error CPUBenchmarkRunner::run() {
 namespace llvm_ml {
 std::unique_ptr<BenchmarkRunner>
 createCPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                         std::unique_ptr<llvm::Module> module,
+                         std::unique_ptr<llvm::Module> module, int pinnedCPU,
                          size_t repeatNoise, size_t repeatWorkload,
                          int numRuns) {
   assert(target);
-  return std::make_unique<CPUBenchmarkRunner>(target, tripleName,
-                                              std::move(module), repeatNoise,
-                                              repeatWorkload, numRuns);
+  return std::make_unique<CPUBenchmarkRunner>(
+      target, tripleName, std::move(module), pinnedCPU, repeatNoise,
+      repeatWorkload, numRuns);
 }
 } // namespace llvm_ml

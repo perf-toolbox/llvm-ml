@@ -82,4 +82,6 @@ inline Measurement operator-(const BenchmarkResult &wl,
 
   return m;
 }
+
+BenchmarkResult avg(llvm::ArrayRef<BenchmarkResult> results);
 } // namespace llvm_ml

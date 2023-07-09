@@ -94,4 +94,44 @@ void Measurement::exportJSON(llvm::raw_ostream &os, llvm::StringRef source,
 
   os << res.dump(4);
 }
+
+BenchmarkResult avg(llvm::ArrayRef<BenchmarkResult> inputs) {
+  const auto minEltPred = [](const auto &lhs, const auto &rhs) {
+    return lhs.numCycles < rhs.numCycles;
+  };
+
+  llvm::SmallVector<BenchmarkResult> results(inputs);
+  std::sort(results.begin(), results.end(), minEltPred);
+  results.pop_back_n(2);
+
+  BenchmarkResult avg;
+
+  avg.numRuns = results.front().numRuns;
+
+  size_t numFailed = 0;
+
+  for (auto res : results) {
+    if (res.hasFailed) {
+      numFailed++;
+      continue;
+    }
+    avg.numCycles += res.numCycles;
+    avg.numContextSwitches += res.numContextSwitches;
+    avg.numCacheMisses += res.numCacheMisses;
+    avg.numMicroOps += res.numMicroOps;
+    avg.numInstructions += res.numInstructions;
+    avg.numMisalignedLoads += res.numMisalignedLoads;
+  }
+
+  const size_t total = results.size() - numFailed;
+
+  avg.numCycles /= total;
+  avg.numContextSwitches /= total;
+  avg.numCacheMisses /= total;
+  avg.numMicroOps /= total;
+  avg.numInstructions /= total;
+  avg.numMisalignedLoads /= total;
+
+  return avg;
+}
 } // namespace llvm_ml

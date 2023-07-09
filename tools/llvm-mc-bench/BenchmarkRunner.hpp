@@ -26,7 +26,7 @@ public:
 
 std::unique_ptr<BenchmarkRunner>
 createCPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                         std::unique_ptr<llvm::Module> harness,
+                         std::unique_ptr<llvm::Module> harness, int pinnedCPU,
                          size_t repeatNoise, size_t repeatWorkload,
                          int numRuns);
 } // namespace llvm_ml

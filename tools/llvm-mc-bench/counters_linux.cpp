@@ -118,32 +118,6 @@ public:
     arg.fstr = NULL;
     arg.size = sizeof(arg);
 
-    if (pfm_get_os_event_encoding("MISALIGNED_LOADS", PFM_PLM0 | PFM_PLM3,
-                                  PFM_OS_PERF_EVENT_EXT, &arg) == PFM_SUCCESS) {
-      memset(&pea, 0, sizeof(struct perf_event_attr));
-      pea.type = PERF_TYPE_RAW;
-      pea.size = sizeof(struct perf_event_attr);
-      pea.config = arg.idx;
-      pea.sample_period = 0;
-      pea.sample_type = PERF_SAMPLE_READ;
-      pea.wakeup_events = 1;
-      pea.disabled = 1;
-      pea.exclude_kernel = 1;
-      pea.exclude_hv = 1;
-      pea.exclude_idle = 1;
-      pea.read_format = PERF_FORMAT_GROUP | PERF_FORMAT_ID;
-
-      CounterFd mlFd;
-      mlFd.type = Counter::MisalignedLoads;
-      mlFd.fd = syscall(__NR_perf_event_open, &pea, 0, -1, baseFd.fd, 0);
-      if (mlFd.fd == -1) {
-        llvm::errs() << "Error opening uops fd\n";
-        std::terminate();
-      }
-      ioctl(mlFd.fd, PERF_EVENT_IOC_ID, &mlFd.id);
-      mDescriptors.push_back(mlFd);
-    }
-
     memset(&pea, 0, sizeof(struct perf_event_attr));
     pea.type = PERF_TYPE_HW_CACHE;
     pea.size = sizeof(struct perf_event_attr);

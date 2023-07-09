@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
   size_t noiseRepeat = static_cast<size_t>(llvm_ml::kNoiseFrac * NumRepeat);
 
   auto runner = llvm_ml::createCPUBenchmarkRunner(
-      target, TripleName, std::move(module), noiseRepeat,
+      target, TripleName, std::move(module), PinnedCPU, noiseRepeat,
       noiseRepeat + NumRepeat, NumRuns);
   exitOnErr(runner->run());
 
@@ -167,12 +167,12 @@ int main(int argc, char **argv) {
     return lhs.numCycles < rhs.numCycles;
   };
 
-  auto minNoise =
-      std::min_element(noiseResults.begin(), noiseResults.end(), minEltPred);
+  auto minNoise = llvm_ml::avg(noiseResults);
+  // std::max_element(noiseResults.begin(), noiseResults.end(), minEltPred);
   auto minWorkload = std::min_element(workloadResults.begin(),
                                       workloadResults.end(), minEltPred);
 
-  llvm_ml::Measurement m = *minWorkload - *minNoise;
+  llvm_ml::Measurement m = *minWorkload - minNoise;
   m.noiseNumRuns = noiseRepeat;
   m.workloadNumRuns = NumRepeat + noiseRepeat;
   m.measuredNumRuns = NumRepeat;
