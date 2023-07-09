@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: setup bazelisk
+      uses: doppelganger113/bazelisk-setup-action@v1.0.5
+    - name: setup mold
+      run: sudo apt update && sudo apt -yqq mold
+    - name: cache
+      uses: actions/cache@v3
+      with:
+        path: ./bzl-cache
+        key: scratch-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          llvm-ml-${{ runner.os }}
+    - name: build
+      run: bazel build --config=ci //...
+    - name: lit tests
+      run: bazel test --config=ci //tests/...
