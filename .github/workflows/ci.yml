@@ -25,7 +25,7 @@ jobs:
         path: ./bzl-cache
         key: scratch-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
-          llvm-ml-${{ runner.os }}
+          scratch-${{ runner.os }}
     - name: build
       run: bazel build --config=ci //...
     - name: lit tests
