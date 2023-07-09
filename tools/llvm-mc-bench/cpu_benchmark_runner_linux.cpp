@@ -102,8 +102,10 @@ static int allocateSharedMemory(const std::string &path, int flag) {
   return fd;
 }
 
+static void fake_bench(void *) {}
+
 static void runHarness(llvm::StringRef libPath, std::string harnessName,
-                       int pinnedCPU, const std::string &shmemPath,
+                       int pinnedCPU, const std::string &shmemPath, int numRuns,
                        llvm::ArrayRef<void *> addresses) {
   // FIXME(Alex): there must be a better way to wait for parent to become
   // ready
@@ -161,32 +163,42 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     __builtin_prefetch(addr, 0, 0);
   }
 
-  auto counters = createCounters([out](llvm::ArrayRef<CounterValue> values) {
-    uint64_t *res = reinterpret_cast<uint64_t *>(static_cast<size_t *>(out) +
-                                                 2 * sizeof(void *));
-    for (const auto &val : values) {
-      if (val.type == Counter::Cycles) {
-        res[0] = val.value;
-      } else if (val.type == Counter::CacheMisses) {
-        res[1] = val.value;
-      } else if (val.type == Counter::ContextSwitches) {
-        res[2] = val.value;
-      } else if (val.type == Counter::Instructions) {
-        res[3] = val.value;
-      } else if (val.type == Counter::MicroOps) {
-        res[4] = val.value;
-      } else if (val.type == Counter::MisalignedLoads) {
-        res[5] = val.value;
-      }
-    }
-  });
+  size_t runId = 0;
+  auto counters =
+      createCounters([out, &runId](llvm::ArrayRef<CounterValue> values) {
+        BenchmarkResult result{.hasFailed = false};
+        for (const auto &val : values) {
+          if (val.type == Counter::Cycles) {
+            result.numCycles = val.value;
+          } else if (val.type == Counter::CacheMisses) {
+            result.numCacheMisses = val.value;
+          } else if (val.type == Counter::ContextSwitches) {
+            result.numContextSwitches = val.value;
+          } else if (val.type == Counter::Instructions) {
+            result.numInstructions = val.value;
+          } else if (val.type == Counter::MicroOps) {
+            result.numMicroOps = val.value;
+          } else if (val.type == Counter::MisalignedLoads) {
+            result.numMisalignedLoads = val.value;
+          }
+        }
 
-  std::this_thread::yield();
+        auto *res = reinterpret_cast<BenchmarkResult *>(out);
+        res[runId++] = result;
+      });
 
-  fn(counters.get(), reinterpret_cast<void *>(&counters_start),
-     reinterpret_cast<void *>(&counters_stop), out);
+  // Warm-up
+  for (size_t i = 0; i < 5; i++)
+    fn(nullptr, reinterpret_cast<void *>(&fake_bench),
+       reinterpret_cast<void *>(&fake_bench), out);
 
-  llvm_ml::flushCounters(counters.get());
+  for (int i = 0; i < numRuns; i++) {
+    fn(counters.get(), reinterpret_cast<void *>(&counters_start),
+       reinterpret_cast<void *>(&counters_stop), out);
+
+    llvm_ml::flushCounters(counters.get());
+  }
+
   close(shmemFD);
   _exit(0);
 }
@@ -248,6 +260,8 @@ static ExitStatus runParent(int child) {
 }
 
 llvm::Error CPUBenchmarkRunner::run() {
+  assert(sizeof(BenchmarkResult) * mNumRuns < PAGE_SIZE);
+
   int objFd = 0;
   llvm::SmallVector<char> objectPathChar;
   llvm::sys::fs::createTemporaryFile("llvm-mc-bench", ".o", objFd,
@@ -305,7 +319,7 @@ llvm::Error CPUBenchmarkRunner::run() {
     for (unsigned i = 0; i < MAX_FAULTS; i++) {
       ExitStatus status = fork<ExitStatus>(
           [&]() {
-            runHarness(libPath, harnessName, pinnedCPU, shmemPath,
+            runHarness(libPath, harnessName, pinnedCPU, shmemPath, 1,
                        mappedAddresses);
           },
           [](int child) -> ExitStatus { return runParent(child); });
@@ -333,41 +347,30 @@ llvm::Error CPUBenchmarkRunner::run() {
       }
     }
 
-    for (int i = 0; i < mNumRuns; i++) {
+    for (size_t i = 0; i < MAX_FAULTS; i++) {
       ExitStatus status = fork<ExitStatus>(
           [&]() {
-            runHarness(libPath, harnessName, pinnedCPU, shmemPath,
+            runHarness(libPath, harnessName, pinnedCPU, shmemPath, mNumRuns,
                        mappedAddresses);
           },
           [](int child) -> ExitStatus { return runParent(child); });
 
       if (status.reason != ExitReason::Success) {
         llvm::errs() << "Run failed\n";
+        continue;
         results.push_back(BenchmarkResult{.hasFailed = true});
-      } else {
-        void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                         shmemFD, PAGE_SIZE * 2);
-        uint64_t *res = reinterpret_cast<uint64_t *>(
-            static_cast<size_t *>(out) + 2 * sizeof(void *));
-        results.push_back(BenchmarkResult{.hasFailed = false,
-                                          .numCycles = res[0],
-                                          .numContextSwitches = res[2],
-                                          .numCacheMisses = res[1],
-                                          .numMicroOps = res[4],
-                                          .numInstructions = res[3],
-                                          .numMisalignedLoads = res[5]});
       }
+
+      void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       shmemFD, PAGE_SIZE * 2);
+      auto *res = reinterpret_cast<BenchmarkResult *>(out);
+      for (int j = 0; j < mNumRuns; j++)
+        results.push_back(res[j]);
     }
 
     return llvm::Error::success();
   };
 
-  // Warmup run
-  {
-    llvm::SmallVector<llvm_ml::BenchmarkResult> temp;
-    if (auto err = runBenchmark(llvm_ml::kBaselineNoiseName, mPinnedCPU, temp))
-      return err;
-  }
   if (auto err =
           runBenchmark(llvm_ml::kBaselineNoiseName, mPinnedCPU, mNoiseResults))
     return err;
