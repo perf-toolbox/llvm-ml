@@ -26,8 +26,9 @@ py_proto_library(
 cc_library(
     name = "target",
     srcs = [
-       "target/Target.cpp",
+        "target/Target.cpp",
         "target/X86Target.cpp",
+        "target/AArch64Target.cpp",
     ],
     hdrs = [
         "target/Target.hpp"
@@ -42,6 +43,8 @@ cc_library(
         "@llvm-project//llvm:Target",
         "@llvm-project//llvm:X86CommonTableGen",
         "@llvm-project//llvm:X86UtilsAndDesc",
+        "@llvm-project//llvm:AArch64CommonTableGen",
+        "@llvm-project//llvm:AArch64UtilsAndDesc",
     ]
 )
 
