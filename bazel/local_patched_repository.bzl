@@ -77,7 +77,6 @@ def _impl(ctx):
         fail("Only one of build_file and build_file_content can be provided.")
 
     repo_path = str(ctx.path(Label("//:BUILD")).dirname) + "/" + ctx.attr.path
-    print(repo_path)
 
     _patch_args = []
     for arg in ctx.attr.patch_args:

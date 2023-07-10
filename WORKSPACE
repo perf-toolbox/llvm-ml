@@ -41,6 +41,7 @@ git_repository(
   name = "nlohmann_json",
   commit = "bbe337c3a30d5f6eea418b4aee399525536de37a",
   remote = "https://github.com/nlohmann/json.git",
+  shallow_since = "1678279425 +0100",
 )
 
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
