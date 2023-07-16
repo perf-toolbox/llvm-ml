@@ -13,9 +13,9 @@ cc_library(
       "llvm-mc-bench/BenchmarkResult.cpp",
       "llvm-mc-bench/BenchmarkGenerator.hpp",
       "llvm-mc-bench/BenchmarkGenerator.cpp",
+      "llvm-mc-bench/counters.cpp",
     ] + select({
       "@platforms//os:linux": [
-        "llvm-mc-bench/counters_linux.cpp",
         "llvm-mc-bench/cpu_benchmark_runner_linux.cpp",
       ],
       "//conditions:default": [],
@@ -29,12 +29,8 @@ cc_library(
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",
-    ] + select({
-      "@platforms//os:linux": [
-        "//third_party:libpfm",
-      ],
-      "//conditions:default": [],
-    }),
+      "//third_party:libpmu",
+    ],
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
 )
 

@@ -37,6 +37,12 @@ http_archive(
     sha256 = "7f6ebb62298694d8cf3ecaed81b3bb48de559819ac1909d4055abdc8c0ae1000",
 )
 
+http_archive(
+    name = "rules_rust",
+    sha256 = "4a9cb4fda6ccd5b5ec393b2e944822a62e050c7c06f1ea41607f14c4fdec57a2",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.25.1/rules_rust-v0.25.1.tar.gz"],
+)
+
 git_repository(
   name = "nlohmann_json",
   commit = "bbe337c3a30d5f6eea418b4aee399525536de37a",
