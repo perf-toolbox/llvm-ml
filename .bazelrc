@@ -36,6 +36,7 @@ build:generic_clang --repo_env=CC=clang
 build:ci --config=mold
 build:ci -c fastbuild
 build:ci --disk_cache=./bzl-cache
+build:ci --sandbox_writable_path=/home/runner/.cargo
 
 # Include user defines
 # It's a good practice to put something like 
