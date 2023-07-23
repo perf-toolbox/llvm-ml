@@ -44,12 +44,7 @@ cc_binary(
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",
-    ] + select({
-      "@platforms//os:linux": [
-        "//third_party:libpfm",
-      ],
-      "//conditions:default": [],
-    })
+    ]
 )
 
 cc_binary(

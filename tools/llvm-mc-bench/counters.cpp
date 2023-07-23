@@ -12,22 +12,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <asm/unistd.h>
-#include <errno.h>
 #include <functional>
-#include <inttypes.h>
-#include <linux/hw_breakpoint.h>
-#include <linux/perf_event.h>
 #include <memory>
-#include <perfmon/pfmlib.h>
-#include <perfmon/pfmlib_perf_event.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/syscall.h>
-#include <unistd.h>
 #include <vector>
 
 #include "counters.hpp"
