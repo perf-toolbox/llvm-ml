@@ -8,6 +8,8 @@ import random
 from sklearn.manifold import TSNE
 import numpy as np
 import matplotlib
+import llvm_ml
+import llvm_ml.utils
 
 
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
@@ -19,25 +21,26 @@ def blend_colors(hex_colors, weights):
     return matplotlib.colors.rgb2hex(blended_rgb)
 
 
-def convert_graph(graph_data):
+def convert_graph(basic_block):
     graph = nx.DiGraph()
-    source = graph_data.source.split("\n")
+    source = basic_block.source.split("\n")
     node_colors = []
-    for n in graph_data.nodes:
+    node_id = 0
+    for n in basic_block.node_properties:
         color_weights = [0.] * 7
-        if n.is_load:
+        if n['is_load']:
             color_weights[0] = 1.
-        if n.is_store:
+        if n['is_store']:
             color_weights[1] = 1.
-        if n.is_barrier:
+        if n['is_barrier']:
             color_weights[2] = 1.
-        if n.is_atomic:
+        if n['is_atomic']:
             color_weights[3] = 1.
-        if n.is_vector:
+        if n['is_vector']:
             color_weights[4] = 1.
-        if n.is_compute and not n.is_float:
+        if n['is_compute'] and not n['is_float']:
             color_weights[5] = 1.
-        if n.is_float:
+        if n['is_float']:
             color_weights[6] = 1.
         color_weights = np.array(color_weights)
         if np.sum(color_weights) != 0:
@@ -45,13 +48,15 @@ def convert_graph(graph_data):
         blended_color = blend_colors(colors, color_weights)
         node_colors.append(blended_color)
 
-        level = 0 if n.is_virtual_root else 1
-        graph.add_node(n.node_id, level=level)
-        if n.node_id > 0 and graph_data.has_virtual_root:
-            graph.nodes[n.node_id]['instruction'] = source[n.node_id -
-                                                           1].strip().replace("\t", "    ")
-    for e in graph_data.edges:
-        graph.add_edge(getattr(e, 'from', 0), e.to)
+        level = 0 if n['is_virtual'] else 1
+        graph.add_node(node_id, level=level)
+        if node_id > 0 and basic_block.has_virtual_root:
+            graph.nodes[node_id]['instruction'] = source[node_id - 1].strip().replace("\t", "    ")
+        elif not basic_block.has_virtual_root:
+            graph.nodes[node_id]['instruction'] = source[node_id].strip().replace("\t", "    ")
+        node_id += 1
+    for e in np.transpose(basic_block.edges):
+        graph.add_edge(e[0], e[1])
 
     return graph, node_colors
 
@@ -81,19 +86,45 @@ def plot_graph(graph, node_colors, source_str, filename):
     plt.close(fig)
 
 
-def get_fig_data(piece):
-    source_lines = piece.graph.source.split("\n")
+def get_fig_data(basic_block):
+    source_lines = basic_block.source.split("\n")
     source_lines = [
         x.strip().replace("\t", "    ") for x in source_lines if x.strip().replace("\t", "") != '']
     source_str = '\n'.join(source_lines)
     source_str += "\n"
 
-    measured_cycles = f"Measured cycles: {piece.metrics.measured_cycles / piece.metrics.measured_num_runs}"
-    cache_misses = f"Cache misses: {getattr(piece.metrics, 'total_cache_misses', 0)}"
-    context_switches = f"Context switches: {getattr(piece.metrics, 'total_context_switches', 0)}"
-
+    measured_cycles = f"Measured cycles: {basic_block.cycles}"
+    cache_misses = f"Cache misses: {basic_block.cache_misses}"
+    context_switches = f"Context switches: {basic_block.context_switches}"
 
     return '\n'.join([source_str, measured_cycles, cache_misses, context_switches])
+
+
+def plot_distribution(path, markdown, cycles):
+    m_fig, ax = plt.subplots()
+    cycles_capped = np.where(cycles < 10000)
+    max_cycles = np.max(cycles[cycles_capped])
+    ax.hist(cycles, bins=np.arange(0, max_cycles, 1))
+    m_fig.savefig(path)
+    plt.close(m_fig)
+    markdown.write(f"![Cycles Distribution]({os.path.basename(path)})\n\n")
+
+
+def print_sample(sample_id, basic_block, base_path, markdown):
+    asm_path = os.path.join(base_path, f"asm_{sample_id}.s")
+    asm_file = open(asm_path, 'w')
+    asm_file.write(basic_block.source)
+    asm_file.close()
+
+    graph, node_colors = convert_graph(basic_block)
+
+    info_str = get_fig_data(basic_block)
+
+    graph_filename = f"graph-{sample_id}.png"
+    graph_path = os.path.join(base_path, graph_filename)
+
+    plot_graph(graph, node_colors, info_str, graph_path)
+    markdown.write(f"![Sample graph]({graph_filename})\n\n")
 
 
 parser = argparse.ArgumentParser(
@@ -110,124 +141,41 @@ assert (os.path.exists(args.filename))
 assert (os.path.exists(args.output))
 assert (os.path.isdir(args.output))
 
-dataset = lib.structures.mc_dataset_pb2.MCDataset()
-dataset.ParseFromString(open(args.filename, 'rb').read())
+basic_blocks = llvm_ml.utils.load_data(args.filename, show_progress=True)
+basic_blocks = sorted(basic_blocks, key = lambda bb: bb.cycles)
 
-processed_nodes = set()
-nodes = []
-colored_nodes = []
-features = [0] * 7
-diameters = []
-cycles = []
+markdown = open(os.path.join(args.output, "report.md"), 'w')
+markdown.write(f"# Report for {args.filename}\n\n")
+markdown.write(f"## Basic info\n\n")
+markdown.write(f"Total samples: {len(basic_blocks)}\n")
+markdown.write(f"Non-zero context switches: {sum(1 if bb.context_switches != 0 else 0 for bb in basic_blocks)}\n")
+markdown.write(f"Non-zero cache misses: {sum(1 if bb.cache_misses != 0 else 0 for bb in basic_blocks)}\n")
 
-for d in tqdm(dataset.data):
-    for n in d.graph.nodes:
-        if n.is_load:
-            features[0] += 1
-        if n.is_store:
-            features[1] += 1
-        if n.is_barrier:
-            features[2] += 1
-        if n.is_atomic:
-            features[3] += 1
-        if n.is_vector:
-            features[4] += 1
-        if n.is_compute and not n.is_float:
-            features[5] += 1
-        if n.is_float:
-            features[6] += 1
+markdown.write("\n## Cycles distribution\n\n")
+cycles = np.array([bb.cycles for bb in basic_blocks])
+plot_distribution(os.path.join(args.output, 'cycles_distribution.png'), markdown, cycles)
+markdown.write("Zoomed up to 50 cycles\n\n")
+cycles_zoom = np.where(cycles <= 50)
+plot_distribution(os.path.join(args.output, 'cycles_distribution_zoom.png'), markdown, cycles[cycles_zoom])
 
-        if n.opcode not in processed_nodes and not n.is_virtual_root:
-            processed_nodes.add(n.opcode)
-            binstr = "{0:b}".format(n.opcode)
-            bin = []
-            for c in reversed(binstr):
-                bin.append(int(c))
-            bin.extend([0] * (16 - len(binstr)))
-            nodes.append(bin)
-
-            color_weights = [0.] * 7
-            if n.is_load:
-                color_weights[0] = 1.
-            if n.is_store:
-                color_weights[1] = 1.
-            if n.is_barrier:
-                color_weights[2] = 1.
-            if n.is_atomic:
-                color_weights[3] = 1.
-            if n.is_vector:
-                color_weights[4] = 1.
-            if n.is_compute and not n.is_float:
-                color_weights[5] = 1.
-            if n.is_float:
-                color_weights[6] = 1.
-            color_weights = np.array(color_weights)
-            if np.sum(color_weights) != 0:
-                color_weights = color_weights / np.sum(color_weights)
-            blended_color = blend_colors(colors, color_weights)
-            colored_nodes.append(blended_color)
-    
-    graph = convert_graph(d.graph)
-    cycles.append(d.metrics.measured_cycles / getattr(d.metrics, 'measured_num_runs', 200))
-    # diameters.append(nx.diameter(graph))
-
-# with open(os.path.join(args.output, 'graph_stats.md'), 'w') as f:
-#     f.write("|Min distance|Max distance|Mean distance|Median distance|\n")
-#     f.write("|---|---|---|---|\n")
-#     f.write("|{:.2f}|{:.2f}|{:.2f}|{:.2f}|\n".format(
-#         min(diameters), max(diameters), np.mean(diameters), np.median(diameters)))
-
-with open(os.path.join(args.output, 'opcodes.txt'), 'w') as f:
-    f.write(str(nodes))
-
-
-dist_fig, ax = plt.subplots()
-ax.barh(["is_load", "is_store", "is_barrier", "is_atomic",
-        "is_vector", "is_compute", "is_float"], features)
-dist_fig.savefig(os.path.join(args.output, 'distribution.png'))
-plt.close(dist_fig)
-
-m_fig, ax = plt.subplots()
-cycles = np.array(cycles)
-cycles_capped = np.where(cycles < 10000)
-max_cycles = np.max(cycles[cycles_capped])
-ax.hist(cycles, bins=np.arange(0, max_cycles, 1))
-m_fig.savefig(os.path.join(args.output, 'cycles_distribution.png'))
-plt.close(m_fig)
-
-m_fig, ax = plt.subplots()
-filter = cycles < 50
-ax.hist(cycles[filter], bins=np.arange(0, 50, 0.5))
-m_fig.savefig(os.path.join(args.output, 'zoom_cycles_distribution.png'))
-plt.close(m_fig)
-
+markdown.write(f"## 5 random samples\n\n")
 for i in range(5):
-    piece = random.choice(dataset.data)
-    graph, node_colors = convert_graph(piece.graph)
+    bb = random.choice(basic_blocks)
+    markdown.write(f"### Sample {i + 1}\n\n")
+    markdown.write(f"Cycles: {bb.cycles}\n")
+    markdown.write(f"Cache misses: {bb.cache_misses}\n")
+    markdown.write(f"Context switches: {bb.context_switches}\n")
+    print_sample(i + 1, bb, args.output, markdown)
 
-    source_str = get_fig_data(piece)
+markdown.write(f"## 10 longest samples\n\n")
+num_longest = 1
+for bb in basic_blocks[-10:]:
+    markdown.write(f"### Sample {num_longest}\n\n")
+    markdown.write(f"Cycles: {bb.cycles}\n")
+    markdown.write(f"Cache misses: {bb.cache_misses}\n")
+    markdown.write(f"Context switches: {bb.context_switches}\n")
+    print_sample(f"longest_{num_longest}", bb, args.output, markdown)
+    num_longest += 1
 
-    filename = os.path.join(args.output, 'graph-%d.png' % (i + 1))
+markdown.close()
 
-    plot_graph(graph, node_colors, source_str, filename)
-
-    asm_filename = os.path.join(args.output, f"asm-{i + 1}.s")
-    f = open(asm_filename, 'w')
-    f.write(source_str)
-    f.close()
-
-
-longest_piece = dataset.data[np.argmax(cycles)]
-longest_graph, node_colors = convert_graph(longest_piece.graph)
-longest_source_str = get_fig_data(longest_piece)
-longest_filename = os.path.join(args.output, 'graph-longest.png')
-plot_graph(longest_graph, node_colors, longest_source_str, longest_filename)
-
-
-tsne = TSNE(n_components=3, random_state=0, learning_rate="auto", init="pca")
-nodes_tsne = tsne.fit_transform(np.array(nodes))
-
-fig, ax = plt.subplots(1, 1, figsize=(14, 7))
-ax.scatter(nodes_tsne[:, 0], nodes_tsne[:, 1], s=10, c=colored_nodes)
-fig.savefig(os.path.join(args.output, 'tsne.png'))
-plt.close(fig)
