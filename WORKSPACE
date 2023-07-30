@@ -4,6 +4,7 @@ SKYLIB_VERSION = "1.0.3"
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
 
 http_archive(
     name = "bazel_skylib",
@@ -53,36 +54,19 @@ git_repository(
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
-#load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-#rules_foreign_cc_dependencies()
+LLVM_COMMIT = "7c1a6c07ccd93a801dad27780cd1301c56c13829"
 
-# Hack for broken zstd support
-new_local_repository(
-  name = "llvm_zstd",
-  build_file_content="""cc_library(name="zstd", visibility = ["//visibility:public"])""",
-  workspace_file_content="",
-  path="third_party/zstd_fake"
-)
+LLVM_SHA256 = "26dc9f463ed06c7df7a43d738f8b1c0c9eacb2fca8be0f676eb65c7e98a6f18b"
 
-load("//bazel:local_patched_repository.bzl", "local_patched_repository")
-
-local_patched_repository(
+http_archive(
     name = "llvm-raw",
     build_file_content = "# empty",
-    path = "third_party/llvm-project",
-    patches = ["//patches:llvm.patch"],
-    patch_args = ["-p1", "--verbose"],
+    sha256 = LLVM_SHA256,
+    strip_prefix = "llvm-project-" + LLVM_COMMIT,
+    urls = ["https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)],
 )
 
 load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
-
-http_archive(
-    name = "llvm_zlib",
-    build_file = "@llvm-raw//utils/bazel/third_party_build:zlib-ng.BUILD",
-    sha256 = "e36bb346c00472a1f9ff2a0a4643e590a254be6379da7cddd9daeb9a7f296731",
-    strip_prefix = "zlib-ng-2.0.7",
-    url = "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.0.7.zip",
-)
 
 llvm_configure(
   name = "llvm-project",
@@ -91,6 +75,28 @@ llvm_configure(
         "AArch64",
         "X86",
   ],
+)
+
+maybe(
+    http_archive,
+    name = "llvm_zlib",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:zlib-ng.BUILD",
+    sha256 = "e36bb346c00472a1f9ff2a0a4643e590a254be6379da7cddd9daeb9a7f296731",
+    strip_prefix = "zlib-ng-2.0.7",
+    urls = [
+        "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.0.7.zip",
+    ],
+)
+
+maybe(
+    http_archive,
+    name = "llvm_zstd",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:zstd.BUILD",
+    sha256 = "7c42d56fac126929a6a85dbc73ff1db2411d04f104fae9bdea51305663a83fd0",
+    strip_prefix = "zstd-1.5.2",
+    urls = [
+        "https://github.com/facebook/zstd/releases/download/v1.5.2/zstd-1.5.2.tar.gz",
+    ],
 )
 
 load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
