@@ -279,6 +279,12 @@ public:
     return opcode >= llvm::X86::MOV16ao16 && opcode <= llvm::X86::MOVZX64rr8;
   }
 
+  bool isSyscall(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return opcode >= llvm::X86::SYSCALL && opcode <= llvm::X86::SYSRET64;
+  }
+
   std::unique_ptr<llvm_ml::InlineAsmBuilder> createInlineAsmBuilder() override {
     return std::make_unique<X86InlineAsmBuilder>();
   }
