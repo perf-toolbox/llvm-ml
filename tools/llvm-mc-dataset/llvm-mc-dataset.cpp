@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
           if (path.extension() != ".pb")
             continue;
 
-          std::fstream ifs{path};
+          std::fstream ifs{path, std::ios::in | std::ios::binary};
           llvm_ml::MCGraph graph;
           if (!graph.ParseFromIstream(&ifs))
             continue;
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
           if (path.extension() != ".pb")
             continue;
 
-          std::fstream ifs{path};
+          std::fstream ifs{path, std::ios::in | std::ios::binary};
           llvm_ml::MCMetrics metric;
           if (!metric.ParseFromIstream(&ifs))
             continue;
