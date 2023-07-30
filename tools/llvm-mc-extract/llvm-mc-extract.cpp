@@ -374,8 +374,15 @@ static void postprocess() {
                    !mlTarget->isPush(inst) && !mlTarget->isPop(inst);
           });
 
-      // This basic block is probably not doing anything useful
-      if (!hasCompute) {
+      bool hasVariableLatency =
+          std::any_of(instructions->begin(), instructions->end(),
+                      [&](const llvm::MCInst &inst) {
+                        return mlTarget->isVarLatency(inst);
+                      });
+
+      // This basic block is probably not doing anything useful or has a
+      // variable latency
+      if (!hasCompute || hasVariableLatency) {
         fs::remove(path);
         return;
       }

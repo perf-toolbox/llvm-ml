@@ -59,6 +59,7 @@ public:
   virtual bool isPop(const llvm::MCInst &inst) = 0;
   virtual bool isMov(const llvm::MCInst &inst) = 0;
   virtual bool isSyscall(const llvm::MCInst &inst) = 0;
+  virtual bool isVarLatency(const llvm::MCInst &inst) = 0;
 
   virtual std::unique_ptr<InlineAsmBuilder> createInlineAsmBuilder() = 0;
 };

@@ -285,6 +285,23 @@ public:
     return opcode >= llvm::X86::SYSCALL && opcode <= llvm::X86::SYSRET64;
   }
 
+  bool isVarLatency(const llvm::MCInst &inst) override {
+    unsigned opcode = inst.getOpcode();
+
+    return (opcode >= llvm::X86::DIV16m && opcode <= llvm::X86::DIV_FrST0) ||
+           (opcode >= llvm::X86::IDIV16m && opcode <= llvm::X86::IDIV8r) ||
+           (opcode >= llvm::X86::VDIVPDYrm &&
+            opcode <= llvm::X86::VDIVSSrr_Int) ||
+           (opcode >= llvm::X86::PFRSQRTrm && opcode <= llvm::X86::PFRSQRTrr) ||
+           (opcode >= llvm::X86::RSQRTPSm &&
+            opcode <= llvm::X86::RSQRTSSr_Int) ||
+           (opcode >= llvm::X86::SQRTPDm && opcode <= llvm::X86::SQRT_Fp80) ||
+           (opcode >= llvm::X86::VRSQRT14PDZ128m &&
+            opcode <= llvm::X86::VRSQRTSSr_Int) ||
+           (opcode >= llvm::X86::VSQRTPDYm &&
+            opcode <= llvm::X86::VSQRTSSr_Int);
+  }
+
   std::unique_ptr<llvm_ml::InlineAsmBuilder> createInlineAsmBuilder() override {
     return std::make_unique<X86InlineAsmBuilder>();
   }
