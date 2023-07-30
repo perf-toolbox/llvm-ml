@@ -19,6 +19,8 @@ jobs:
       uses: doppelganger113/bazelisk-setup-action@v1.0.5
     - name: setup mold
       run: sudo apt update && sudo apt -yqq install mold
+    - name: install gcc 13
+      run: sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/ppa && sudo apt update && sudo apt install -yqq gcc-13
     - name: cache
       uses: actions/cache@v3
       with:
@@ -28,8 +30,8 @@ jobs:
           scratch-${{ runner.os }}
     - name: build
       env:
-        CC: gcc-12
-        CXX: g++-12
+        CC: gcc-13
+        CXX: g++-13
       run: bazel build --config=ci //...
     - name: lit tests
       env:
