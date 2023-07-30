@@ -137,7 +137,7 @@ static void extractBasicBlocks(const object::ObjectFile &object,
 
   const auto isBlockTerminator = [&](const MCInst &inst) {
     const MCInstrDesc &desc = mcii->get(inst.getOpcode());
-    return desc.isTerminator() || desc.isCall();
+    return desc.isTerminator() || desc.isCall() || mlTarget->isSyscall(inst);
   };
 
   uint64_t blockCounter = 0;
