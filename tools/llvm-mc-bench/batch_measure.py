@@ -7,7 +7,7 @@ import psutil
 def create_task(basic_block, out_dir, cpu_num, retry, num_runs):
     out_name = os.path.basename(basic_block)
     out_path = os.path.join(out_dir, out_name + ".pb")
-    handle = subprocess.Popen(["./bazel-bin/tools/llvm-mc-bench", basic_block, "-o", out_path, "-c", str(cpu_num), "-n", str(num_runs)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    handle = subprocess.Popen(["./bazel-bin/tools/llvm-mc-bench", basic_block, "-o", out_path, "-c", str(cpu_num), "--num-repeat", str(num_runs)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     task = {}
     task["proc"] = handle
     task["basic_block"] = basic_block
@@ -23,7 +23,7 @@ parser.add_argument("input")
 parser.add_argument("output")
 parser.add_argument("--cpus", type=str, required=True)
 parser.add_argument("-r", "--retries", default=2, type=int)
-parser.add_argument("-n", "--num_runs", default=200, type=int)
+parser.add_argument("-n", "--num-repeat", default=120, type=int)
 parser.add_argument("--start", default=0, type=int)
 parser.add_argument("--end", default=0, type=int)
 parser.add_argument("--progress", action="store_true")
@@ -69,13 +69,13 @@ for bbf in inputs:
                 parent.kill()
                 continue
             if t["proc"].returncode != 0 and t["retries"] + 1 < args.retries:
-                new_tasks.append(create_task(t["basic_block"], args.output, t["cpu"], t["retries"] + 1, args.num_runs))
+                new_tasks.append(create_task(t["basic_block"], args.output, t["cpu"], t["retries"] + 1, args.num_repeat))
                 cpus.remove(t["cpu"])
 
         tasks = new_tasks
                 
     cpu = cpus.pop()            
-    tasks.append(create_task(os.path.join(args.input, bbf), args.output, cpu, 0, args.num_runs))
+    tasks.append(create_task(os.path.join(args.input, bbf), args.output, cpu, 0, args.num_repeat))
     progress += 1
     if args.progress:
         pbar.update()
