@@ -25,6 +25,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
+#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/InitLLVM.h"
@@ -41,6 +42,7 @@
 #include <boost/thread/future.hpp>
 #include <filesystem>
 #include <indicators/indicators.hpp>
+#include <llvm/Support/Error.h>
 #include <nlohmann/json.hpp>
 
 #include <fstream>
@@ -96,6 +98,8 @@ struct GraphProperties {
   size_t numOpcodes;
   bool hasVirtualRoot;
   std::string source;
+  std::string triple;
+  std::string cpu;
 
 private:
   friend class boost::serialization::access;
@@ -129,6 +133,8 @@ static void storeGraphIntoJSON(json &out, const Graph &g) {
   out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
   out["has_virtual_root"] =
       boost::get_property(g, &GraphProperties::hasVirtualRoot);
+  out["triple"] = boost::get_property(g, &GraphProperties::triple);
+  out["cpu"] = boost::get_property(g, &GraphProperties::cpu);
 }
 
 static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
@@ -205,6 +211,10 @@ static llvm::cl::opt<std::string>
 static llvm::cl::opt<std::string>
     TripleName("triple", llvm::cl::desc("Target triple to assemble for, "
                                         "see -version for available targets"));
+static llvm::cl::opt<std::string>
+    MCPU("mcpu",
+         llvm::cl::desc("Target a specific cpu type (-mcpu=help for details)"),
+         llvm::cl::value_desc("cpu-name"), llvm::cl::init("native"));
 
 static llvm::cl::opt<bool>
     ReadableJSON("readable-json",
@@ -271,6 +281,9 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
     return llvm::createStringError(EC, "Failed to open the file");
   }
 
+  if (MCPU == "native")
+    MCPU = std::string(llvm::sys::getHostCPUName());
+
   const llvm::MCTargetOptions options =
       llvm::mc::InitMCTargetOptionsFromFlags();
   std::unique_ptr<llvm::MCRegisterInfo> mcri(
@@ -278,7 +291,10 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
   std::unique_ptr<llvm::MCAsmInfo> mcai(
       target->createMCAsmInfo(*mcri, TripleName, options));
   std::unique_ptr<llvm::MCSubtargetInfo> msti(
-      target->createMCSubtargetInfo(TripleName, "", ""));
+      target->createMCSubtargetInfo(TripleName, MCPU, ""));
+  if (!msti->isCPUStringValid(MCPU))
+    return llvm::createStringError(llvm::errc::invalid_argument,
+                                   "Invalid -mcpu value");
   std::unique_ptr<llvm::MCInstrInfo> mcii(target->createMCInstrInfo());
 
   llvm::SourceMgr sourceMgr;
@@ -309,6 +325,8 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
   gp.source = std::move(source);
   gp.hasVirtualRoot = VirtualRoot;
   gp.numOpcodes = map.size();
+  gp.triple = TripleName;
+  gp.cpu = MCPU;
 
   Graph g(instructions->size() + static_cast<size_t>(VirtualRoot == true), gp);
 

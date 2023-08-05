@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib
 import llvm_ml
 import llvm_ml.utils
+import subprocess
+import tempfile
 
 
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
@@ -59,6 +61,23 @@ def convert_graph(basic_block):
         graph.add_edge(e[0], e[1])
 
     return graph, node_colors
+
+
+def get_llvm_mca_estimation(basic_block):
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.s', delete=False) as tmp:
+        tmp.write(basic_block.source)
+        file_name = tmp.name
+        tmp.close()
+        try:
+            out = subprocess.check_output(["llvm-mca", "--mtriple", basic_block.triple, "--mcpu", basic_block.cpu, "--iterations", "100", file_name])
+            m = re.search(r"Total Cycles:\s+([0-9]+)", str(out))
+            os.remove(file_name)
+            return float(int(m.group(0))) / 100.0
+        except:
+            os.remove(file_name)
+            return 0.0
+        
+    return 0.0
 
 
 def nudge(pos, x_shift, y_shift):
@@ -128,9 +147,7 @@ def print_sample(sample_id, basic_block, base_path, markdown):
 
 
 parser = argparse.ArgumentParser(
-    prog="mc-dataset-report",
-    description="Analyze the contents of MC dataset",
-)
+    prog="mc-dataset-report", description="Analyze the contents of MC dataset",)
 
 parser.add_argument('filename')
 parser.add_argument('-o', '--output', default=None, required=True)
@@ -157,6 +174,14 @@ plot_distribution(os.path.join(args.output, 'cycles_distribution.png'), markdown
 markdown.write("Zoomed up to 50 cycles\n\n")
 cycles_zoom = np.where(cycles <= 50)
 plot_distribution(os.path.join(args.output, 'cycles_distribution_zoom.png'), markdown, cycles[cycles_zoom])
+
+llvm_mca_cycles = np.asarray([get_llvm_mca_estimation(bb) for bb in tqdm(basic_blocks)])
+dist_plot = llvm_ml.utils.plot_histogram(cycles[cycles_zoom], llvm_mca_cycles[cycles_zoom], title='llvm-ml vs llvm-mca distribution', xlabel='llvm-ml', ylabel='llvm-mca', percentile=0.99)
+with open(os.path.join(args.output, 'llvm_mca_dist.png'), 'w+b') as dist_plot_file:
+    dist_plot_file.write(dist_plot.getbuffer())
+
+markdown.write("Distribution of measured values vs llvm-mca prediction:\n")
+markdown.write("![Distribution](llvm_mca_dist.png)\n\n")
 
 markdown.write(f"## 5 random samples\n\n")
 for i in range(5):

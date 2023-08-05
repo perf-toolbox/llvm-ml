@@ -8,6 +8,8 @@ class BasicBlock:
             self.nodes = np.zeros(len(basic_block.graph.nodes), dtype=np.int_)
         self.node_properties = []
         self.has_virtual_root = basic_block.graph.has_virtual_root
+        self.triple = basic_block.graph.triple
+        self.cpu = basic_block.graph.cpu
 
         for i in range(len(basic_block.graph.nodes)):
             node = basic_block.graph.nodes[i]

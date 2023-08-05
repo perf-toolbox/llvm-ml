@@ -28,4 +28,6 @@ message MCGraph {
   uint32 num_opcodes = 3;
   bool has_virtual_root = 4;
   string source = 5;
+  string triple = 6;
+  string cpu = 7;
 }
