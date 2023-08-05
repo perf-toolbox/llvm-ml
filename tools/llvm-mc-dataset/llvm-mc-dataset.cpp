@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
           if (path.extension() != ".pb")
             continue;
 
-          std::fstream ifs{path, std::ios::in | std::ios::binary};
+          std::fstream ifs{path};
           llvm_ml::MCGraph graph;
           if (!graph.ParseFromIstream(&ifs))
             continue;
