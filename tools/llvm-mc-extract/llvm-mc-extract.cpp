@@ -33,14 +33,14 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
-#include <boost/thread/executors/basic_thread_pool.hpp>
-#include <boost/thread/future.hpp>
 #include <filesystem>
 #include <future>
 #include <indicators/indicators.hpp>
+#include <llvm/Support/Threading.h>
 
 using namespace llvm;
 namespace fs = std::filesystem;
@@ -271,10 +271,11 @@ static void postprocess() {
       option::FontStyles{
           std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
 
-  unsigned int numThreads = boost::thread::hardware_concurrency();
-  boost::executors::basic_thread_pool pool{numThreads};
+  llvm::ThreadPoolStrategy strategy = llvm::hardware_concurrency();
+  const unsigned int numThreads = strategy.compute_thread_count();
+  llvm::ThreadPool pool{strategy};
 
-  auto filenames = boost::async(pool, [&]() {
+  auto filenames = pool.async([&]() {
     std::vector<fs::path> bbs;
     bbs.reserve(10'000'000);
 
@@ -303,7 +304,7 @@ static void postprocess() {
   spinner.set_option(option::PrefixText{"✔"});
   spinner.set_option(option::PostfixText{"Complete!"});
 
-  std::vector<boost::future<void>> dispatchedTasks;
+  std::vector<std::shared_future<void>> dispatchedTasks;
   dispatchedTasks.reserve(numThreads);
 
   BlockProgressBar bar{
@@ -315,7 +316,7 @@ static void postprocess() {
   for (const auto &path : files) {
     fs::path outFile = blocks_dir / path.filename();
 
-    auto future = boost::async(pool, [path = outFile]() {
+    auto future = pool.async([path = outFile]() {
       const llvm::Target *target = getTarget("");
       Triple triple(TripleName);
 
@@ -391,7 +392,8 @@ static void postprocess() {
     dispatchedTasks.push_back(std::move(future));
 
     if (dispatchedTasks.size() == numThreads) {
-      boost::wait_for_all(dispatchedTasks.begin(), dispatchedTasks.end());
+      for (auto &future : dispatchedTasks)
+        future.wait();
 
       dispatchedTasks.clear();
     }

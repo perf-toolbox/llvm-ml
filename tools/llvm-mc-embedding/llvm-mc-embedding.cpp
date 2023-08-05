@@ -31,14 +31,14 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/ThreadPool.h"
+#include "llvm/Support/Threading.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
 #include <boost/graph/adj_list_serialize.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graphviz.hpp>
-#include <boost/thread/executors/basic_thread_pool.hpp>
-#include <boost/thread/future.hpp>
 #include <filesystem>
 #include <indicators/indicators.hpp>
 #include <nlohmann/json.hpp>
@@ -411,11 +411,15 @@ int main(int argc, char **argv) {
     using namespace indicators;
     indicators::show_console_cursor(false);
 
-    unsigned int numThreads = boost::thread::hardware_concurrency();
-    if (Jobs != 0)
-      numThreads = Jobs;
+    llvm::ThreadPoolStrategy strategy = []() {
+      if (Jobs != 0) {
+        return llvm::hardware_concurrency(Jobs);
+      }
+      return llvm::hardware_concurrency();
+    }();
+    unsigned int numThreads = strategy.compute_thread_count();
 
-    boost::executors::basic_thread_pool pool{numThreads};
+    llvm::ThreadPool pool{strategy};
 
     IndeterminateProgressBar spinner{
         option::BarWidth{40},
@@ -428,7 +432,7 @@ int main(int argc, char **argv) {
         option::FontStyles{
             std::vector<indicators::FontStyle>{indicators::FontStyle::bold}}};
 
-    auto filenames = boost::async(pool, [&spinner, &input]() {
+    auto filenames = pool.async([&spinner, &input]() {
       std::vector<fs::path> files;
       // This is a very big vector, but the datasets tend to be no smaller
       files.reserve(30'000'000);
@@ -458,7 +462,7 @@ int main(int argc, char **argv) {
     spinner.set_option(option::PrefixText{"✔"});
     spinner.set_option(option::PostfixText{"Complete!"});
 
-    std::vector<boost::future<llvm::Error>> dispatchedTasks;
+    std::vector<std::shared_future<llvm::Error>> dispatchedTasks;
     dispatchedTasks.reserve(numThreads);
 
     BlockProgressBar bar{
@@ -477,17 +481,18 @@ int main(int argc, char **argv) {
         outFile.replace_extension("pb");
       }
 
-      auto future = boost::async(pool, &processSingleInput, std::move(path),
-                                 std::move(outFile), triple);
+      auto future = pool.async(&processSingleInput, std::move(path),
+                               std::move(outFile), triple);
       dispatchedTasks.push_back(std::move(future));
 
       if (dispatchedTasks.size() == numThreads) {
-        boost::wait_for_all(dispatchedTasks.begin(), dispatchedTasks.end());
+        for (auto &future : dispatchedTasks)
+          future.wait();
 
         for (auto &f : dispatchedTasks) {
-          auto err = f.get();
-          if (err) {
-            llvm::errs() << err << "\n";
+          // TODO(Alex): this is definitely a UB
+          if (const_cast<llvm::Error &>(f.get())) {
+            llvm::errs() << f.get() << "\n";
           }
         }
 
