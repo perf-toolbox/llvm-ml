@@ -4,9 +4,15 @@ cargo_native_libraries(
   name = "libpmu_cargo",
   path = "libpmu",
   srcs = glob(["libpmu/**/*"], exclude=["libpmu/target/**/*"]),
-  outs = [
-    "libpmu.so"
-  ]
+  outs = select({
+      "@platforms//os:linux": [
+        "libpmu.so",
+      ],
+      "@platforms//os:macos": [
+        "libpmu.dylib"
+      ],
+      "//conditions:default": [],
+    })
 )
 
 cc_library(

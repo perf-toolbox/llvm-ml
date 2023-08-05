@@ -18,6 +18,9 @@ cc_library(
       "@platforms//os:linux": [
         "llvm-mc-bench/cpu_benchmark_runner_linux.cpp",
       ],
+      "@platforms//os:macos": [
+        "llvm-mc-bench/cpu_benchmark_runner_macos.cpp",
+      ],
       "//conditions:default": [],
     }),
     deps = [
@@ -43,7 +46,6 @@ cc_binary(
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
       "@//lib:target",
-      # "@//lib:cpp_structures_proto",
     ]
 )
 

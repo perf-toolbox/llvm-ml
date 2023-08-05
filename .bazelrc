@@ -16,9 +16,6 @@ build --dynamic_mode=off
 # Prevent invalid caching if input files are modified during a build.
 build --experimental_guard_against_concurrent_changes
 
-# Add layering check to all projects.
-# build --features=layering_check
-
 build --incompatible_dont_enable_host_nonhost_crosstool_features=false
 build --per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
@@ -33,8 +30,6 @@ build:debug -c dbg
 
 build:mold --linkopt=-fuse-ld=mold --host_linkopt=-fuse-ld=mold
 build:lld --linkopt=-fuse-ld=lld --host_linkopt=-fuse-ld=lld
-
-build:generic_clang --repo_env=CC=clang
 
 build:ci --config=mold
 build:ci -c fastbuild

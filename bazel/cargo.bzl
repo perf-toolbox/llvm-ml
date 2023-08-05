@@ -53,7 +53,7 @@ def _cargo_native_libraries_impl(ctx):
     for f in ctx.attr.outs:
         out_path = paths.join(ctx.attr.path, "target", mode, f)
         out_files.append(ctx.actions.declare_file(f))
-        touch += "cp " + str(out_path) + " ../bazel-out/k8-" + bazel_mode + "/bin/" + str(ctx.label.package) + "/" + f + "; "
+        touch += "cp " + str(out_path) + " ../bazel-out/k8-" + bazel_mode + "/bin/" + str(ctx.label.package) + "/" + f + " || cp " + str(out_path) + " ../bazel-bin/third_party/" + f + "; "
 
     ctx.actions.run_shell(
       inputs = ctx.files.srcs,
