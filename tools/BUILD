@@ -73,7 +73,6 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
-      "@boost//:graph",
       "@nlohmann_json//:json",
       "@//lib:target",
       "@//lib:cpp_structures_proto",
