@@ -36,9 +36,6 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
 
-#include <boost/graph/adj_list_serialize.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graphviz.hpp>
 #include <filesystem>
 #include <indicators/indicators.hpp>
 #include <nlohmann/json.hpp>
@@ -66,50 +63,31 @@ struct NodeFeatures {
       false; ///< true if the instruction performs floating point computation
   bool isVirtualRoot = false;
   size_t nodeId = 0;
-
-  int64_t get_one_hot_embeddings(const std::map<unsigned, size_t> &map) const {
-    if (isVirtualRoot)
-      return -1;
-    return map.at(opcode);
-  }
-
-private:
-  friend class boost::serialization::access;
-
-  template <class Archive>
-  void serialize(Archive &ar, const unsigned int /* version */) {
-    ar &opcode;
-  }
 };
 
 struct EdgeFeatures {
   bool isData = false;
-
-private:
-  friend class boost::serialization::access;
-
-  template <class Archive>
-  void serialize(Archive &ar, const unsigned int /* version */) {}
 };
 
-struct GraphProperties {
+struct Graph {
   size_t numOpcodes;
   bool hasVirtualRoot;
   std::string source;
 
-private:
-  friend class boost::serialization::access;
+  void addNode(const NodeFeatures &features) { mNodes.push_back(features); }
 
-  template <class Archive>
-  void serialize(Archive &ar, const unsigned int /* version */) {
-    ar &numOpcodes;
-    ar &source;
+  void addEdge(size_t from, size_t to, const EdgeFeatures &features) {
+    mEdges.emplace_back(from, to, features);
   }
-};
 
-using Graph =
-    boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
-                          NodeFeatures, EdgeFeatures, GraphProperties>;
+  const std::vector<NodeFeatures> &getNodes() const { return mNodes; }
+
+  const auto &getEdges() const { return mEdges; }
+
+private:
+  std::vector<NodeFeatures> mNodes;
+  std::vector<std::tuple<size_t, size_t, EdgeFeatures>> mEdges;
+};
 
 static json getMetaFeatures(const NodeFeatures &n) {
   json node;
@@ -125,24 +103,24 @@ static json getMetaFeatures(const NodeFeatures &n) {
 }
 
 static void storeGraphIntoJSON(json &out, const Graph &g) {
-  out["source"] = boost::get_property(g, &GraphProperties::source);
-  out["num_opcodes"] = boost::get_property(g, &GraphProperties::numOpcodes);
-  out["has_virtual_root"] =
-      boost::get_property(g, &GraphProperties::hasVirtualRoot);
+  out["source"] = g.source;
+  out["num_opcodes"] = g.numOpcodes;
+  out["has_virtual_root"] = g.hasVirtualRoot;
 }
 
 static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
   auto nodes = json::array();
 
-  for (auto vd : boost::make_iterator_range(vertices(g))) {
-    const auto &n = g[vd];
+  for (auto n : g.getNodes()) {
     json node = getMetaFeatures(n);
     nodes.push_back(node);
   }
 
   auto edges = json::array();
-  for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
-    auto edge = json({boost::source(e, g), boost::target(e, g)});
+  for (const auto &e : g.getEdges()) {
+    auto edge = json();
+    edge["from"] = std::get<0>(e);
+    edge["to"] = std::get<1>(e);
     edges.push_back(edge);
   }
 
@@ -157,13 +135,11 @@ static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
 static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
                        llvm::raw_ostream &os) {
   llvm_ml::MCGraph graph;
-  graph.set_source(boost::get_property(g, &GraphProperties::source));
-  graph.set_num_opcodes(boost::get_property(g, &GraphProperties::numOpcodes));
-  graph.set_has_virtual_root(
-      boost::get_property(g, &GraphProperties::hasVirtualRoot));
+  graph.set_source(g.source);
+  graph.set_num_opcodes(g.numOpcodes);
+  graph.set_has_virtual_root(g.hasVirtualRoot);
 
-  for (auto vd : boost::make_iterator_range(vertices(g))) {
-    const auto &n = g[vd];
+  for (const auto &n : g.getNodes()) {
     auto *pbNode = graph.add_nodes();
     pbNode->set_is_load(n.isLoad);
     pbNode->set_is_store(n.isStore);
@@ -172,17 +148,15 @@ static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
     pbNode->set_is_vector(n.isVector);
     pbNode->set_is_compute(n.isCompute);
     pbNode->set_opcode(n.opcode);
-    pbNode->set_onehot(n.get_one_hot_embeddings(map));
     pbNode->set_is_virtual_root(n.isVirtualRoot);
     pbNode->set_node_id(n.nodeId);
   }
 
-  for (const auto &e : boost::make_iterator_range(boost::edges(g))) {
-    const auto &ef = g[e];
+  for (const auto &e : g.getEdges()) {
     auto *pbEdge = graph.add_edges();
-    pbEdge->set_from(boost::source(e, g));
-    pbEdge->set_to(boost::target(e, g));
-    pbEdge->set_is_data(ef.isData);
+    pbEdge->set_from(std::get<0>(e));
+    pbEdge->set_to(std::get<1>(e));
+    pbEdge->set_is_data(std::get<EdgeFeatures>(e).isData);
   }
 
   std::string serialized;
@@ -209,8 +183,6 @@ static llvm::cl::opt<std::string>
 static llvm::cl::opt<bool>
     ReadableJSON("readable-json",
                  llvm::cl::desc("Export features as readable JSON format"));
-static llvm::cl::opt<bool> Dot("dot",
-                               llvm::cl::desc("Visualize graph in DOT format"));
 static llvm::cl::opt<bool> VirtualRoot(
     "virtual-root",
     llvm::cl::desc(
@@ -305,12 +277,10 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
 
   std::string source =
       sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str();
-  GraphProperties gp;
-  gp.source = std::move(source);
-  gp.hasVirtualRoot = VirtualRoot;
-  gp.numOpcodes = map.size();
-
-  Graph g(instructions->size() + static_cast<size_t>(VirtualRoot == true), gp);
+  Graph graph;
+  graph.source = std::move(source);
+  graph.hasVirtualRoot = VirtualRoot;
+  graph.numOpcodes = map.size();
 
   if (VirtualRoot) {
     NodeFeatures features;
@@ -318,7 +288,7 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
     features.opcode = 0;
     features.nodeId = 0;
 
-    boost::put(boost::vertex_bundle, g, 0, features);
+    graph.addNode(features);
   }
 
   for (size_t i = 0; i < instructions->size(); i++) {
@@ -335,12 +305,13 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
 
     features.nodeId = idx;
 
-    boost::put(boost::vertex_bundle, g, idx, features);
+    graph.addNode(features);
+    EdgeFeatures ef;
     if ((i > 0) && InOrder) {
-      boost::add_edge(idx - 1, idx, g);
+      graph.addEdge(idx - 1, idx, ef);
     }
     if (VirtualRoot) {
-      boost::add_edge(0, idx, g);
+      graph.addEdge(0, idx, ef);
     }
   }
 
@@ -355,7 +326,7 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
         size_t offset = static_cast<size_t>(VirtualRoot == true);
         EdgeFeatures ef;
         ef.isData = true;
-        boost::add_edge(lastWrite.at(reg) + offset, i + offset, ef, g);
+        graph.addEdge(lastWrite.at(reg) + offset, i + offset, ef);
       }
     }
 
@@ -368,17 +339,9 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
   llvm::raw_fd_ostream ofs(output.c_str(), ec);
 
   if (ReadableJSON) {
-    exportReadableJSON(g, ofs);
-  } else if (Dot) {
-    std::ostringstream os;
-    boost::dynamic_properties dp;
-    dp.property("label", get(&NodeFeatures::opcode, g));
-    dp.property("node_id", get(&NodeFeatures::nodeId, g));
-    boost::write_graphviz_dp(os, g, dp);
-    os.flush();
-    ofs << os.str();
+    exportReadableJSON(graph, ofs);
   } else {
-    exportPBuf(g, map, ofs);
+    exportPBuf(graph, map, ofs);
   }
 
   ofs.close();
@@ -475,8 +438,6 @@ int main(int argc, char **argv) {
       fs::path outFile = output / path.filename();
       if (ReadableJSON) {
         outFile.replace_extension("json");
-      } else if (Dot) {
-        outFile.replace_extension("dot");
       } else {
         outFile.replace_extension("pb");
       }
