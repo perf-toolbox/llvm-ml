@@ -44,6 +44,14 @@ git_repository(
   shallow_since = "1678279425 +0100",
 )
 
+CAPNPROTO_TAG = "c0bebbc38913951b75ed05ac38117d8c9c3001b2"
+
+http_archive(
+    name = "capnp-cpp",
+    urls = ["https://github.com/capnproto/capnproto/archive/{tag}.tar.gz".format(tag = CAPNPROTO_TAG)],
+    strip_prefix = "capnproto-{tag}/c++".format(tag = CAPNPROTO_TAG),
+)
+
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
@@ -63,7 +71,7 @@ load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
 
 llvm_configure(
   name = "llvm-project",
-  # repo_mapping = {"@llvm_zlib": "@zlib"},
+  repo_mapping = {"@llvm_zlib": "@zlib"},
   targets = [
         "AArch64",
         "X86",
@@ -72,7 +80,7 @@ llvm_configure(
 
 maybe(
     http_archive,
-    name = "llvm_zlib",
+    name = "zlib",
     build_file = "@llvm-raw//utils/bazel/third_party_build:zlib-ng.BUILD",
     sha256 = "e36bb346c00472a1f9ff2a0a4643e590a254be6379da7cddd9daeb9a7f296731",
     strip_prefix = "zlib-ng-2.0.7",

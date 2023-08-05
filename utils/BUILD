@@ -9,7 +9,7 @@ py_binary(
   ],
   main = "dataset-report/main.py",
   deps = [
-    "//lib:py_structures_proto",
+    #"//lib:py_structures_proto",
     "//python:llvm_ml",
     requirement("tqdm"),
     requirement("matplotlib"),
@@ -41,7 +41,23 @@ cc_binary(
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
       "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      #"@//lib:cpp_structures_proto",
+    ],
+    visibility = [
+      "//tests:__pkg__",
+      "//tests:__subpackages__",
+    ]
+)
+
+cc_binary(
+    name = "mc-data-gen",
+    srcs = [
+      "mc-data-gen/main.cpp",
+    ],
+    deps = [
+      "//lib:cpp_structures",
+      "@llvm-project//llvm:Support",
+      "@capnp-cpp//src/capnp",
     ],
     visibility = [
       "//tests:__pkg__",

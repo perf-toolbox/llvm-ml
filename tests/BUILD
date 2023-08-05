@@ -23,12 +23,14 @@ expand_template(
 glob_lit_tests(
     data = [
         "//utils:mc-harness-dump",
+        "//utils:mc-data-gen",
+        "//tools:llvm-mc-dataset",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:count",
         "@llvm-project//llvm:not",
         "lit.cfg.py",
     ],
     driver = "lit.site.cfg",
-    test_file_exts = ["s"],
+    test_file_exts = ["s", "tst"],
 )
 

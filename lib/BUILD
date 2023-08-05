@@ -1,25 +1,30 @@
-load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@rules_python//python:proto.bzl", "py_proto_library")
+load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
 
-proto_library(
-    name = "structures_proto",
+cc_capnp_library(
+  name = "structures_gen",
+  srcs = [
+    "structures/mc_dataset.capnp",
+    "structures/mc_metrics.capnp",
+    "structures/mc_graph.capnp",
+  ],
+)
+
+cc_library(
+    name = "cpp_structures",
+    hdrs = [
+      "structures/mc_dataset.capnp.h",
+      "structures/mc_graph.capnp.h",
+      "structures/mc_metrics.capnp.h",
+      "structures/structures.hpp",
+    ],
     srcs = [
-        "structures/mc_graph.proto",
-        "structures/mc_metrics.proto",
-        "structures/mc_dataset.proto",
-    ]
-)
-
-cc_proto_library(
-    name = "cpp_structures_proto",
-    deps = [":structures_proto"],
-    visibility = ["//visibility:public"],
-)
-
-py_proto_library(
-    name = "py_structures_proto",
-    deps = [":structures_proto"],
+      "structures/mc_dataset.capnp.c++",
+      "structures/mc_metrics.capnp.c++",
+      "structures/mc_graph.capnp.c++",
+      "structures/structures.cpp",
+    ],
+    include_prefix = "llvm-ml",
+    deps = [":structures_gen"],
     visibility = ["//visibility:public"],
 )
 

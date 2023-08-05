@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "lib/structures/mc_graph.pb.h"
+#include "llvm-ml/structures/structures.hpp"
 #include "llvm-ml/target/Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
@@ -132,36 +132,40 @@ static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
   os << out.dump(4);
 }
 
-static void exportPBuf(const Graph &g, const std::map<unsigned, size_t> &map,
-                       llvm::raw_ostream &os) {
-  llvm_ml::MCGraph graph;
-  graph.set_source(g.source);
-  graph.set_num_opcodes(g.numOpcodes);
-  graph.set_has_virtual_root(g.hasVirtualRoot);
+static void exportBinary(const Graph &g, const std::map<unsigned, size_t> &map,
+                         std::filesystem::path path) {
+  capnp::MallocMessageBuilder message;
+  llvm_ml::MCGraph::Builder graph = message.initRoot<llvm_ml::MCGraph>();
+  graph.setSource(g.source);
+  graph.setMaxOpcode(g.numOpcodes);
+  graph.setHasVirtualRoot(g.hasVirtualRoot);
+
+  capnp::List<llvm_ml::MCNode>::Builder nodes =
+      graph.initNodes(g.getNodes().size());
 
   for (const auto &n : g.getNodes()) {
-    auto *pbNode = graph.add_nodes();
-    pbNode->set_is_load(n.isLoad);
-    pbNode->set_is_store(n.isStore);
-    pbNode->set_is_barrier(n.isBarrier);
-    pbNode->set_is_atomic(n.isAtomic);
-    pbNode->set_is_vector(n.isVector);
-    pbNode->set_is_compute(n.isCompute);
-    pbNode->set_opcode(n.opcode);
-    pbNode->set_is_virtual_root(n.isVirtualRoot);
-    pbNode->set_node_id(n.nodeId);
+    llvm_ml::MCNode::Builder bNode = nodes[n.nodeId];
+    bNode.setIsLoad(n.isLoad);
+    bNode.setIsStore(n.isStore);
+    bNode.setIsBarrier(n.isBarrier);
+    bNode.setIsAtomic(n.isAtomic);
+    bNode.setIsVector(n.isVector);
+    bNode.setIsCompute(n.isCompute);
+    bNode.setOpcode(n.opcode);
+    bNode.setIsVirtualRoot(n.isVirtualRoot);
+    bNode.setNodeId(n.nodeId);
   }
 
-  for (const auto &e : g.getEdges()) {
-    auto *pbEdge = graph.add_edges();
-    pbEdge->set_from(std::get<0>(e));
-    pbEdge->set_to(std::get<1>(e));
-    pbEdge->set_is_data(std::get<EdgeFeatures>(e).isData);
+  capnp::List<llvm_ml::MCEdge>::Builder edges =
+      graph.initEdges(g.getEdges().size());
+  for (const auto &e : llvm::enumerate(g.getEdges())) {
+    llvm_ml::MCEdge::Builder bEdge = edges[e.index()];
+    bEdge.setFrom(std::get<0>(e.value()));
+    bEdge.setTo(std::get<1>(e.value()));
+    bEdge.setIsDataDependency(std::get<EdgeFeatures>(e.value()).isData);
   }
 
-  std::string serialized;
-  graph.SerializeToString(&serialized);
-  os << serialized;
+  llvm_ml::writeToFile(path, message);
 }
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
@@ -335,16 +339,16 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
     }
   }
 
-  std::error_code ec;
-  llvm::raw_fd_ostream ofs(output.c_str(), ec);
-
   if (ReadableJSON) {
-    exportReadableJSON(graph, ofs);
-  } else {
-    exportPBuf(graph, map, ofs);
-  }
+    std::error_code ec;
+    llvm::raw_fd_ostream ofs(output.c_str(), ec);
+    // TODO check ec
 
-  ofs.close();
+    exportReadableJSON(graph, ofs);
+    ofs.close();
+  } else {
+    exportBinary(graph, map, output);
+  }
 
   return llvm::Error::success();
 }

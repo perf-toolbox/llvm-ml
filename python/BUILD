@@ -16,7 +16,7 @@ py_library(
   srcs = glob(["llvm_ml/**/*.py"], allow_empty=False),
   imports = ["."],
   deps = [
-    "//lib:py_structures_proto",
+    # "//lib:py_structures_proto",
     requirement("numpy"),
     requirement("tqdm"),
     requirement("protobuf"),

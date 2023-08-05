@@ -10,6 +10,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
+#include <filesystem>
 
 namespace llvm_ml {
 struct BenchmarkResult;
@@ -32,12 +33,12 @@ struct Measurement {
   uint64_t noiseInstructions;
   uint64_t noiseNumRuns;
 
-  void exportProtobuf(llvm::raw_ostream &os, llvm::StringRef source,
-                      llvm::ArrayRef<BenchmarkResult> noise = {},
-                      llvm::ArrayRef<BenchmarkResult> workload = {});
-  void exportJSON(llvm::raw_ostream &os, llvm::StringRef source,
-                  llvm::ArrayRef<BenchmarkResult> noise = {},
-                  llvm::ArrayRef<BenchmarkResult> workload = {});
+  void exportBinary(std::filesystem::path path, llvm::StringRef source,
+                    llvm::ArrayRef<BenchmarkResult> noise,
+                    llvm::ArrayRef<BenchmarkResult> workload);
+  void exportJSON(std::filesystem::path path, llvm::StringRef source,
+                  llvm::ArrayRef<BenchmarkResult> noise,
+                  llvm::ArrayRef<BenchmarkResult> workload);
 };
 
 /// BenchmarkResult is a result of a single harrness run, whether it is a noise

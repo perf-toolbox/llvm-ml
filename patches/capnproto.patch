@@ -1,0 +1,199 @@
+diff --git src/capnp/BUILD.bazel src/capnp/BUILD.bazel
+index f11a7a24..a31d9521 100644
+--- src/capnp/BUILD.bazel
++++ src/capnp/BUILD.bazel
+@@ -52,6 +52,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         "//src/kj:kj-async",
++        "//src/kj"
+     ],
+ )
+ 
+@@ -84,6 +85,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":capnp",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -119,6 +121,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":capnp",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -132,6 +135,7 @@ cc_binary(
+     deps = [
+         ":capnpc",
+         "//src/capnp/compat:json",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -143,6 +147,7 @@ cc_binary(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":capnpc",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -154,6 +159,7 @@ cc_binary(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":capnpc",
++        "//src/kj",
+     ],
+ )
+ 
+diff --git src/capnp/compat/BUILD.bazel src/capnp/compat/BUILD.bazel
+index fcaecfa3..3d3a95db 100644
+--- src/capnp/compat/BUILD.bazel
++++ src/capnp/compat/BUILD.bazel
+@@ -20,6 +20,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         "//src/capnp",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -49,6 +50,7 @@ cc_library(
+     deps = [
+         ":http-over-capnp_capnp",
+         "//src/kj/compat:kj-http",
++        "//src/kj",
+     ],
+ )
+ 
+@@ -65,6 +67,7 @@ cc_library(
+     deps = [
+         "//src/capnp",
+         "//src/kj/compat:kj-http",
++        "//src/kj",
+     ],
+ )
+ 
+diff --git src/capnp/ez-rpc.h src/capnp/ez-rpc.h
+index ef264923..1b07a282 100644
+--- src/capnp/ez-rpc.h
++++ src/capnp/ez-rpc.h
+@@ -22,7 +22,7 @@
+ #pragma once
+ 
+ #include "rpc.h"
+-#include "message.h"
++#include "capnp/message.h"
+ 
+ CAPNP_BEGIN_HEADER
+ 
+diff --git src/kj/BUILD.bazel src/kj/BUILD.bazel
+index e492992c..623e4512 100644
+--- src/kj/BUILD.bazel
++++ src/kj/BUILD.bazel
+@@ -136,6 +136,7 @@ cc_library(
+         ":kj",
+         ":kj-async",
+         ":kj-test",
++        "//src/kj/compat:gtest",
+     ],
+ ) for f in [
+     "arena-test.c++",
+@@ -177,6 +178,9 @@ cc_test(
+     deps = [
+         ":kj-test",
+         "//src/kj/compat:kj-http",
++        "//src/kj/compat:gtest",
++        ":kj",
++        ":kj-async",
+     ],
+ )
+ 
+@@ -194,6 +198,8 @@ cc_test(
+     deps = [
+         ":filesystem-disk-test-base",
+         ":kj-test",
++        "//src/kj/compat:gtest",
++        ":kj",
+     ],
+     target_compatible_with = [
+         "@platforms//os:linux",
+@@ -206,6 +212,7 @@ cc_test(
+     deps = [
+         ":filesystem-disk-test-base",
+         ":kj-test",
++        ":kj",
+     ],
+     target_compatible_with = [
+         "@platforms//os:linux",
+@@ -222,6 +229,7 @@ cc_test(
+         ":kj",
+         ":kj-async",
+         ":kj-test",
++        "//src/kj/compat:gtest",
+     ],
+ )
+ 
+@@ -240,6 +248,8 @@ cc_test(
+         ":async-os-xthread-test-base",
+         ":kj-async",
+         ":kj-test",
++        "//src/kj/compat:gtest",
++        ":kj",
+     ],
+ )
+ 
+@@ -249,6 +259,7 @@ cc_test(
+     deps = [
+         ":kj",
+         ":kj-test",
++        "//src/kj/compat:gtest",
+     ],
+     linkstatic = True,
+     target_compatible_with = [
+diff --git src/kj/async-io-internal.h src/kj/async-io-internal.h
+index d030ad95..eb6e99c3 100644
+--- src/kj/async-io-internal.h
++++ src/kj/async-io-internal.h
+@@ -21,12 +21,12 @@
+ 
+ #pragma once
+ 
+-#include "string.h"
+-#include "vector.h"
+-#include "async-io.h"
++#include "kj/string.h"
++#include "kj/vector.h"
++#include "kj/async-io.h"
+ #include <stdint.h>
+-#include "one-of.h"
+-#include "cidr.h"
++#include "kj/one-of.h"
++#include "kj/cidr.h"
+ 
+ KJ_BEGIN_HEADER
+ 
+diff --git src/kj/compat/BUILD.bazel src/kj/compat/BUILD.bazel
+index f9e31ce6..c8b89c2b 100644
+--- src/kj/compat/BUILD.bazel
++++ src/kj/compat/BUILD.bazel
+@@ -36,6 +36,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         "//src/kj:kj-async",
++        "//src/kj",
+         "@zlib",
+     ],
+ )
+@@ -88,6 +89,7 @@ kj_tests = [
+     deps = [
+         ":kj-http",
+         "//src/kj:kj-test",
++        "//src/kj",
+     ],
+ ) for f in kj_tests]
+ 

@@ -18,11 +18,11 @@ from lit.llvm.subst import ToolSubst
 config.name = 'llvm-ml'
 
 # testFormat: The test format to use to interpret tests.
-config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+config.test_format = lit.formats.ShTest(False)
 
 # suffixes: A list of file extensions to treat as test files. This is overriden
 # by individual lit.local.cfg files in the test subdirectories.
-config.suffixes = ['.s']
+config.suffixes = ['.s', '.tst']
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
@@ -56,10 +56,16 @@ llvm_tools = [
 
 utils = [
     ToolSubst('%mc-harness-dump', FindTool('mc-harness-dump')),
+    ToolSubst('%mc-data-gen', FindTool('mc-data-gen')),
+]
+
+tools = [
+    ToolSubst('%llvm-mc-dataset', FindTool('llvm-mc-dataset')),
 ]
 
 llvm_config.add_tool_substitutions(llvm_tools, config.llvm_tools_dir)
 llvm_config.add_tool_substitutions(utils, config.llvm_ml_utils_root)
+llvm_config.add_tool_substitutions(tools, config.llvm_ml_tools_root)
 
 # Targets
 

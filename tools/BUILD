@@ -28,7 +28,7 @@ cc_library(
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
       "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      "@//lib:cpp_structures",
       "//third_party:libpmu",
     ],
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
@@ -43,7 +43,7 @@ cc_binary(
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
       "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      # "@//lib:cpp_structures_proto",
     ]
 )
 
@@ -75,7 +75,7 @@ cc_binary(
       "@llvm-project//llvm:Target",
       "@nlohmann_json//:json",
       "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      "@//lib:cpp_structures",
       "@//third_party:indicators",
     ]
 )
@@ -87,6 +87,9 @@ cc_binary(
     ],
     deps = [
       "@llvm-project//llvm:Support",
-      "@//lib:cpp_structures_proto",
-    ]
+      "@//lib:cpp_structures",
+    ],
+    visibility = [
+      "//tests:__pkg__",
+    ],
 )

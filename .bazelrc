@@ -17,13 +17,16 @@ build --dynamic_mode=off
 build --experimental_guard_against_concurrent_changes
 
 # Add layering check to all projects.
-build --features=layering_check
+# build --features=layering_check
 
 build --incompatible_dont_enable_host_nonhost_crosstool_features=false
 build --per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
+
+build:clang --repo_env=CC=clang
+build:clang --repo_env=CXX=clang++
 
 build:debug --strip=never
 build:debug -c dbg
