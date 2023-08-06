@@ -12,16 +12,16 @@ cc_capnp_library(
 cc_library(
     name = "cpp_structures",
     hdrs = [
-      "structures/mc_dataset.capnp.h",
-      "structures/mc_graph.capnp.h",
-      "structures/mc_metrics.capnp.h",
-      "structures/structures.hpp",
+        "structures/mc_dataset.capnp.h",
+        "structures/mc_graph.capnp.h",
+        "structures/mc_metrics.capnp.h",
+        "structures/structures.hpp",
     ],
     srcs = [
-      "structures/mc_dataset.capnp.c++",
-      "structures/mc_metrics.capnp.c++",
-      "structures/mc_graph.capnp.c++",
-      "structures/structures.cpp",
+        "structures/mc_dataset.capnp.c++",
+        "structures/mc_metrics.capnp.c++",
+        "structures/mc_graph.capnp.c++",
+        "structures/structures.cpp",
     ],
     include_prefix = "llvm-ml",
     deps = [":structures_gen"],
@@ -29,24 +29,27 @@ cc_library(
 )
 
 cc_library(
-    name = "target",
+    name = "py_structures_static",
     srcs = [
-       "target/Target.cpp",
-        "target/X86Target.cpp",
+        "structures/py_structures.cpp",
     ],
-    hdrs = [
-        "target/Target.hpp"
-    ],
-    include_prefix = "llvm-ml",
-    visibility = ["//tools:__pkg__", "//utils:__pkg__"],
     deps = [
-        "@llvm-project//llvm:Support",
-        "@llvm-project//llvm:MC",
-        "@llvm-project//llvm:MCParser",
-        "@llvm-project//llvm:MCDisassembler",
-        "@llvm-project//llvm:Target",
-        "@llvm-project//llvm:X86CommonTableGen",
-        "@llvm-project//llvm:X86UtilsAndDesc",
-    ]
+        ":cpp_structures",
+        "@nanobind",
+    ],
+    linkstatic = True,
+)
+
+cc_shared_library(
+    name = "py_structures",
+    deps = [
+        ":py_structures_static",
+    ],
+    shared_lib_name = select({
+      "@platforms//os:linux": "_llvm_ml_impl.so",
+      "@platforms//os:macos": "_llvm_ml_impl.dylib",
+      "//conditions:default": "",
+    }),
+    visibility = ["//visibility:public"]
 )
 

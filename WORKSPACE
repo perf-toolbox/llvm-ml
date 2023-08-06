@@ -14,6 +14,7 @@ http_archive(
     ],
     sha256 = "74d544d96f4a5bb630d465ca8bbcfe231e3594e5aae57e1edbf17a6eb3ca2506",
 )
+
 http_archive(
     name = "rules_foreign_cc",
     strip_prefix = "rules_foreign_cc-0.9.0",
@@ -42,14 +43,6 @@ git_repository(
   commit = "bbe337c3a30d5f6eea418b4aee399525536de37a",
   remote = "https://github.com/nlohmann/json.git",
   shallow_since = "1678279425 +0100",
-)
-
-CAPNPROTO_TAG = "c0bebbc38913951b75ed05ac38117d8c9c3001b2"
-
-http_archive(
-    name = "capnp-cpp",
-    urls = ["https://github.com/capnproto/capnproto/archive/{tag}.tar.gz".format(tag = CAPNPROTO_TAG)],
-    strip_prefix = "capnproto-{tag}/c++".format(tag = CAPNPROTO_TAG),
 )
 
 load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
@@ -92,7 +85,7 @@ maybe(
 maybe(
     http_archive,
     name = "llvm_zstd",
-    build_file = "@llvm-raw//utils/bazel/third_party_build:zstd.BUILD",
+    build_file = "//third_party:zstd.BUILD",
     sha256 = "7c42d56fac126929a6a85dbc73ff1db2411d04f104fae9bdea51305663a83fd0",
     strip_prefix = "zstd-1.5.2",
     urls = [

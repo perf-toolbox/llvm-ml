@@ -1,0 +1,13 @@
+module(name = "llvm-ml-libs", version = "0.1")
+
+bazel_dep(name = "robin-map", version = "1.2.1")
+bazel_dep(name = "rules_cc", version = "0.0.6")
+bazel_dep(name = "platforms", version = "0.0.6")
+bazel_dep(name = "rules_python", version = "0.24.0")
+
+non_module_dependencies = use_extension("//:extensions.bzl", "non_module_dependencies")
+use_repo(non_module_dependencies, "capnp-cpp", "nanobind", "bazel_skylib")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+
+use_repo(python, "python_3_10", "python_versions")

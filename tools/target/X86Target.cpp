@@ -264,13 +264,13 @@ public:
   bool isPush(const llvm::MCInst &inst) override {
     unsigned opcode = inst.getOpcode();
 
-    return opcode >= llvm::X86::PUSH16i && opcode <= llvm::X86::PUSHSS32; 
+    return opcode >= llvm::X86::PUSH16i && opcode <= llvm::X86::PUSHSS32;
   }
 
   bool isPop(const llvm::MCInst &inst) override {
     unsigned opcode = inst.getOpcode();
 
-    return opcode >= llvm::X86::POP16r && opcode <= llvm::X86::POPSS32; 
+    return opcode >= llvm::X86::POP16r && opcode <= llvm::X86::POPSS32;
   }
 
   bool isMov(const llvm::MCInst &inst) override {

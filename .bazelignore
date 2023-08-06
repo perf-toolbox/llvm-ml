@@ -1,3 +1,5 @@
 third_party/llvm-project/libcxx/utils/google-benchmark
 third_party/llvm-project/utils/bazel/examples
 third_party/llvm-project/utils/bazel/llvm-project-overlay
+python
+lib
