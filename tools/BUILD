@@ -1,3 +1,28 @@
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("//bazel:packaging_utils.bzl", "shared_object_path_selector")
+
+cc_library(
+    name = "target",
+    srcs = [
+       "target/Target.cpp",
+        "target/X86Target.cpp",
+    ],
+    hdrs = [
+        "target/Target.hpp"
+    ],
+    include_prefix = "llvm-ml",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:MCParser",
+        "@llvm-project//llvm:MCDisassembler",
+        "@llvm-project//llvm:Target",
+        "@llvm-project//llvm:X86CommonTableGen",
+        "@llvm-project//llvm:X86UtilsAndDesc",
+    ]
+)
+
 cc_library(
     name = "llvm-mc-bench-lib",
     hdrs = [
@@ -18,6 +43,9 @@ cc_library(
       "@platforms//os:linux": [
         "llvm-mc-bench/cpu_benchmark_runner_linux.cpp",
       ],
+      "@platforms//os:macos": [
+        "llvm-mc-bench/cpu_benchmark_runner_macos.cpp",
+      ],
       "//conditions:default": [],
     }),
     deps = [
@@ -27,8 +55,8 @@ cc_library(
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
-      "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      ":target",
+      "@llvm-ml-libs//:cpp_structures",
       "//third_party:libpmu",
     ],
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
@@ -42,8 +70,7 @@ cc_binary(
     deps = [
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
-      "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      ":target",
     ]
 )
 
@@ -58,7 +85,7 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
-      "@//lib:target",
+      ":target",
       "@//third_party:indicators",
     ]
 )
@@ -74,8 +101,8 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@nlohmann_json//:json",
-      "@//lib:target",
-      "@//lib:cpp_structures_proto",
+      ":target",
+      "@llvm-ml-libs//:cpp_structures",
       "@//third_party:indicators",
     ]
 )
@@ -87,6 +114,21 @@ cc_binary(
     ],
     deps = [
       "@llvm-project//llvm:Support",
-      "@//lib:cpp_structures_proto",
-    ]
+      "@llvm-ml-libs//:cpp_structures",
+    ],
+    visibility = [
+      "//tests:__pkg__",
+    ],
+)
+
+pkg_files(
+    name = "binary",
+    srcs = [
+        ":llvm-mc-bench",  
+        ":llvm-mc-extract",  
+        ":llvm-mc-embedding",  
+        ":llvm-mc-dataset",  
+    ],
+    prefix = select(shared_object_path_selector) + "/bin",
+    visibility = ["//visibility:public"]
 )

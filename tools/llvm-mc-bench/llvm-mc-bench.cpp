@@ -181,15 +181,14 @@ int main(int argc, char **argv) {
   m.workloadNumRuns = NumRepeat;
   m.measuredNumRuns = NumRepeat - NumRepeatNoise;
 
-  std::error_code errorCode;
-  raw_fd_ostream outfile(OutputFilename, errorCode, sys::fs::OF_None);
+  std::filesystem::path outfile{std::string{OutputFilename}};
   if (ReadableJSON) {
     m.exportJSON(outfile, (*buffer)->getBuffer(), noiseResults,
                  workloadResults);
   } else {
-    m.exportProtobuf(outfile, (*buffer)->getBuffer());
+    m.exportBinary(outfile, (*buffer)->getBuffer(), noiseResults,
+                   workloadResults);
   }
-  outfile.close();
 
   return 0;
 }

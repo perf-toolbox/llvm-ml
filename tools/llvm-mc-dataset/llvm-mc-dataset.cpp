@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "lib/structures/mc_dataset.pb.h"
-#include "lib/structures/mc_graph.pb.h"
+#include "llvm-ml/structures/structures.hpp"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 
+#include <capnp/message.h>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -50,43 +50,46 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::future<std::map<std::string, llvm_ml::MCGraph>> graphFuture =
-      std::async(std::launch::async, [&]() {
-        std::map<std::string, llvm_ml::MCGraph> graphs;
+  std::future<std::map<std::string, kj::Own<llvm_ml::MCGraph::Reader>>>
+      graphFuture = std::async(std::launch::async, [&]() {
+        std::map<std::string, kj::Own<llvm_ml::MCGraph::Reader>> graphs;
 
         for (auto d : fs::directory_iterator(graphsDir)) {
           fs::path path = d.path();
-          if (path.extension() != ".pb")
+          if (path.extension() != ".cbuf")
             continue;
 
-          std::fstream ifs{path};
-          llvm_ml::MCGraph graph;
-          if (!graph.ParseFromIstream(&ifs))
-            continue;
+          const auto appendGraph = [&graphs,
+                                    &path](llvm_ml::MCGraph::Reader &graph) {
+            // Double stem in case of two extensions
+            graphs[std::string{path.stem().stem().c_str()}] =
+                capnp::clone(graph);
+          };
 
-          // Double stem in case of two extensions
-          graphs[std::string{path.stem().stem().c_str()}] = graph;
+          if (!llvm_ml::readFromFile<llvm_ml::MCGraph>(path, appendGraph))
+            continue;
         }
 
         return graphs;
       });
 
-  std::future<std::map<std::string, llvm_ml::MCMetrics>> metricsFuture =
-      std::async(std::launch::async, [&]() {
-        std::map<std::string, llvm_ml::MCMetrics> metrics;
+  std::future<std::map<std::string, kj::Own<llvm_ml::MCMetrics::Reader>>>
+      metricsFuture = std::async(std::launch::async, [&]() {
+        std::map<std::string, kj::Own<llvm_ml::MCMetrics::Reader>> metrics;
 
         for (auto d : fs::directory_iterator(metricsDir)) {
           fs::path path = d.path();
-          if (path.extension() != ".pb")
+          if (path.extension() != ".cbuf")
             continue;
 
-          std::fstream ifs{path, std::ios::in | std::ios::binary};
-          llvm_ml::MCMetrics metric;
-          if (!metric.ParseFromIstream(&ifs))
+          const auto appendMetrics =
+              [&metrics, &path](llvm_ml::MCMetrics::Reader &metric) {
+                // Double stem in case of two extensions
+                metrics[std::string{path.stem().stem().c_str()}] =
+                    capnp::clone(metric);
+              };
+          if (!llvm_ml::readFromFile<llvm_ml::MCMetrics>(path, appendMetrics))
             continue;
-
-          // Double stem in case of two extensions
-          metrics[std::string{path.stem().stem().c_str()}] = metric;
         }
 
         return metrics;
@@ -95,30 +98,39 @@ int main(int argc, char **argv) {
   graphFuture.wait();
   metricsFuture.wait();
 
-  const auto &graphs = graphFuture.get();
-  const auto &metrics = metricsFuture.get();
+  capnp::MallocMessageBuilder message;
+  llvm_ml::MCDataset::Builder dataset = message.initRoot<llvm_ml::MCDataset>();
 
-  llvm_ml::MCDataset dataset;
+  std::vector<std::pair<kj::Own<llvm_ml::MCGraph::Reader>,
+                        kj::Own<llvm_ml::MCMetrics::Reader>>>
+      measuredPairs;
 
-  for (const auto &m : metrics) {
-    if (m.second.measured_cycles() == 0)
-      continue;
-    if (!graphs.count(m.first))
-      continue;
+  {
+    const auto &graphs = graphFuture.get();
+    const auto &metrics = metricsFuture.get();
 
-    const auto &graph = graphs.at(m.first);
-    if (graph.nodes_size() == 0)
-      continue;
+    measuredPairs.reserve(metrics.size());
 
-    auto *data = dataset.add_data();
-    data->mutable_graph()->CopyFrom(graph);
-    data->mutable_metrics()->CopyFrom(m.second);
-    data->mutable_metrics()->clear_source();
+    for (auto &m : metrics) {
+      if (m.second->getMeasuredCycles() == 0)
+        continue;
+      if (!graphs.count(m.first))
+        continue;
+
+      measuredPairs.push_back(std::make_pair(capnp::clone(*graphs.at(m.first)),
+                                             capnp::clone(*m.second)));
+    }
   }
 
-  std::ofstream ofs{OutFile};
-  dataset.SerializeToOstream(&ofs);
-  ofs.close();
+  capnp::List<llvm_ml::MCDataPiece>::Builder pieces =
+      dataset.initData(measuredPairs.size());
+  for (size_t i = 0; i < measuredPairs.size(); i++) {
+    llvm_ml::MCDataPiece::Builder piece = pieces[i];
+    piece.setGraph(*measuredPairs[i].first);
+    piece.setMetrics(*measuredPairs[i].second);
+  }
+
+  llvm_ml::writeToFile(std::string(OutFile), message);
 
   return 0;
 }

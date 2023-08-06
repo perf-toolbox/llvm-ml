@@ -1,4 +1,3 @@
-import lib.structures.mc_dataset_pb2
 import argparse
 import os.path
 from tqdm.auto import tqdm
@@ -93,11 +92,9 @@ def get_fig_data(basic_block):
     source_str = '\n'.join(source_lines)
     source_str += "\n"
 
-    measured_cycles = f"Measured cycles: {basic_block.cycles}"
-    cache_misses = f"Cache misses: {basic_block.cache_misses}"
-    context_switches = f"Context switches: {basic_block.context_switches}"
+    measured_cycles = f"Measured cycles: {basic_block.measured_cycles}"
 
-    return '\n'.join([source_str, measured_cycles, cache_misses, context_switches])
+    return '\n'.join([source_str, measured_cycles])
 
 
 def plot_distribution(path, markdown, cycles):
@@ -148,8 +145,6 @@ markdown = open(os.path.join(args.output, "report.md"), 'w')
 markdown.write(f"# Report for {args.filename}\n\n")
 markdown.write(f"## Basic info\n\n")
 markdown.write(f"Total samples: {len(basic_blocks)}\n")
-markdown.write(f"Non-zero context switches: {sum(1 if bb.context_switches != 0 else 0 for bb in basic_blocks)}\n")
-markdown.write(f"Non-zero cache misses: {sum(1 if bb.cache_misses != 0 else 0 for bb in basic_blocks)}\n")
 
 markdown.write("\n## Cycles distribution\n\n")
 cycles = np.array([bb.cycles for bb in basic_blocks])
@@ -163,8 +158,6 @@ for i in range(5):
     bb = random.choice(basic_blocks)
     markdown.write(f"### Sample {i + 1}\n\n")
     markdown.write(f"Cycles: {bb.cycles}\n")
-    markdown.write(f"Cache misses: {bb.cache_misses}\n")
-    markdown.write(f"Context switches: {bb.context_switches}\n")
     print_sample(i + 1, bb, args.output, markdown)
 
 markdown.write(f"## 10 longest samples\n\n")
@@ -172,8 +165,6 @@ num_longest = 1
 for bb in basic_blocks[-10:]:
     markdown.write(f"### Sample {num_longest}\n\n")
     markdown.write(f"Cycles: {bb.cycles}\n")
-    markdown.write(f"Cache misses: {bb.cache_misses}\n")
-    markdown.write(f"Context switches: {bb.context_switches}\n")
     print_sample(f"longest_{num_longest}", bb, args.output, markdown)
     num_longest += 1
 

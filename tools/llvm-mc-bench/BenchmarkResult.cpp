@@ -4,50 +4,51 @@
 //===----------------------------------------------------------------------===//
 
 #include "BenchmarkResult.hpp"
-#include "lib/structures/mc_metrics.pb.h"
+#include "llvm-ml/structures/structures.hpp"
 
+#include <capnp/message.h>
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
+
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 namespace llvm_ml {
 
-static void toPBuf(const BenchmarkResult &res, MCSample *sample) {
-  sample->set_failed(res.hasFailed);
-  sample->set_cycles(res.numCycles);
-  sample->set_instructions(res.numInstructions);
-  sample->set_uops(res.numMicroOps);
-  sample->set_cache_misses(res.numCacheMisses);
-  sample->set_context_switches(res.numContextSwitches);
+static void toCapNProto(const BenchmarkResult &res, MCSample::Builder sample) {
+  sample.setFailed(res.hasFailed);
+  sample.setCycles(res.numCycles);
+  sample.setInstructions(res.numInstructions);
+  sample.setMicroOps(res.numMicroOps);
+  sample.setCacheMisses(res.numCacheMisses);
+  sample.setContextSwitches(res.numContextSwitches);
+  sample.setNumRepeat(res.numRuns);
 }
 
-void Measurement::exportProtobuf(llvm::raw_ostream &os, llvm::StringRef source,
-                                 llvm::ArrayRef<BenchmarkResult> noise,
-                                 llvm::ArrayRef<BenchmarkResult> workload) {
-  MCMetrics metrics;
-  metrics.set_noise_cycles(noiseCycles);
-  metrics.set_noise_cache_misses(noiseCacheMisses);
-  metrics.set_noise_context_switches(noiseContextSwitches);
-  metrics.set_workload_cycles(workloadCycles);
-  metrics.set_workload_cache_misses(workloadCacheMisses);
-  metrics.set_workload_context_switches(workloadContextSwitches);
-  metrics.set_workload_num_runs(workloadNumRuns);
-  metrics.set_measured_cycles(measuredCycles);
-  metrics.set_measured_num_runs(measuredNumRuns);
-  metrics.set_source(source.str());
+void Measurement::exportBinary(fs::path path, llvm::StringRef source,
+                               llvm::ArrayRef<BenchmarkResult> noise,
+                               llvm::ArrayRef<BenchmarkResult> workload) {
+  capnp::MallocMessageBuilder message;
+  MCMetrics::Builder metrics = message.initRoot<llvm_ml::MCMetrics>();
+  metrics.setMeasuredCycles(measuredCycles);
+  metrics.setNumRepeat(measuredNumRuns);
+  metrics.setSource(source.str());
 
-  for (auto sample : noise) {
-    auto *mcSample = metrics.add_noise_samples();
-    toPBuf(sample, mcSample);
-  }
-  for (auto sample : workload) {
-    auto *mcSample = metrics.add_noise_samples();
-    toPBuf(sample, mcSample);
-  }
+  capnp::List<llvm_ml::MCSample>::Builder noiseSamples =
+      metrics.initNoiseSamples(noise.size());
+  capnp::List<llvm_ml::MCSample>::Builder workloadSamples =
+      metrics.initNoiseSamples(workload.size());
 
-  std::string serialized;
-  metrics.SerializeToString(&serialized);
-  os << serialized;
+  const auto converter = [&](capnp::List<llvm_ml::MCSample>::Builder &out) {
+    return
+        [&](auto result) { toCapNProto(result.value(), out[result.index()]); };
+  };
+
+  llvm::for_each(llvm::enumerate(noise), converter(noiseSamples));
+  llvm::for_each(llvm::enumerate(workload), converter(workloadSamples));
+
+  llvm_ml::writeToFile(path, message);
 }
 
 static json toJSON(const BenchmarkResult &res) {
@@ -63,9 +64,13 @@ static json toJSON(const BenchmarkResult &res) {
   return resJson;
 }
 
-void Measurement::exportJSON(llvm::raw_ostream &os, llvm::StringRef source,
+void Measurement::exportJSON(std::filesystem::path path, llvm::StringRef source,
                              llvm::ArrayRef<BenchmarkResult> noise,
                              llvm::ArrayRef<BenchmarkResult> workload) {
+  std::error_code ec;
+  llvm::raw_fd_ostream os(path.c_str(), ec);
+  // TODO check ec and return an error
+
   json res;
   res["noise_cycles"] = noiseCycles;
   res["noise_cache_misses"] = noiseCacheMisses;

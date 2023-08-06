@@ -1,10 +1,18 @@
 module(name = "llvm-ml", version = "0.1")
 
 bazel_dep(name = "rules_cc", version = "0.0.6")
-bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 bazel_dep(name = "rules_python", version = "0.24.0")
 bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
 bazel_dep(name = "platforms", version = "0.0.6")
+bazel_dep(name = "llvm-ml-py", version = "0.0.1")
+bazel_dep(name = "llvm-ml-libs", version = "0.0.1")
+bazel_dep(name = "rules_pkg", version = "0.9.1")
+
+local_path_override(module_name = "llvm-ml-py", path = "python")
+local_path_override(module_name = "llvm-ml-libs", path = "lib")
+
+non_module_dependencies = use_extension("@llvm-ml-libs//:extensions.bzl", "non_module_dependencies")
+use_repo(non_module_dependencies, "capnp-cpp")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
@@ -19,10 +27,8 @@ pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
     hub_name = "pip",
     python_version = "3.10",
-    requirements_lock = "//python:requirements_lock_3_10.txt",
-    requirements_windows = "//python:requirements_windows_3_10.txt",
+    requirements_lock = "//utils:requirements_lock_3_10.txt",
+    requirements_windows = "//utils:requirements_windows_3_10.txt",
 )
 
 use_repo(pip, "pip", "pip_310")
-
-

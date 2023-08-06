@@ -15,13 +15,15 @@ class Target;
 }
 
 namespace llvm_ml {
-class BenchmarkResult;
+struct BenchmarkResult;
 
 class BenchmarkRunner {
 public:
   virtual llvm::Error run() = 0;
   virtual llvm::ArrayRef<BenchmarkResult> getNoiseResults() const = 0;
   virtual llvm::ArrayRef<BenchmarkResult> getWorkloadResults() const = 0;
+
+  virtual ~BenchmarkRunner() = default;
 };
 
 std::unique_ptr<BenchmarkRunner>
