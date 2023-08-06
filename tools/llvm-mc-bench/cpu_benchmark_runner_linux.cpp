@@ -16,6 +16,7 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+#include <chrono>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <functional>
@@ -30,6 +31,7 @@
 #include <thread>
 
 constexpr unsigned MAX_FAULTS = 30;
+constexpr uint64_t kTimeSliceNS = 3'000'000;
 
 using namespace llvm_ml;
 
@@ -37,13 +39,14 @@ namespace {
 class CPUBenchmarkRunner : public BenchmarkRunner {
 public:
   CPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                     std::unique_ptr<llvm::Module> module, int pinnedCPU,
-                     size_t repeatNoise, size_t repeatWorkload, int numRuns)
-      : mTarget(target), mTripleName(tripleName), mModule(std::move(module)),
-        mPinnedCPU(pinnedCPU), mRepeatNoise(repeatNoise),
-        mRepeatWorkload(repeatWorkload), mNumRuns(numRuns) {}
+                     int pinnedCPU, int numRuns)
+      : mTarget(target), mTripleName(tripleName), mPinnedCPU(pinnedCPU),
+        mNumRuns(numRuns) {}
 
-  llvm::Error run() override;
+  llvm::Error run(std::unique_ptr<llvm::Module> harness, size_t numNoiseRepeat,
+                  size_t numRepeat) override;
+  llvm::Expected<int> check(std::unique_ptr<llvm::Module> harness,
+                            size_t numNoiseRepeat) override;
 
   llvm::ArrayRef<llvm_ml::BenchmarkResult> getNoiseResults() const override {
     return mNoiseResults;
@@ -54,12 +57,16 @@ public:
   }
 
 private:
+  llvm::Error
+  runSingleBenchmark(const std::string &libPath, const std::string &harnessName,
+                     int numRepeat, const std::string &shmemPath, int shmemFD,
+                     llvm::SmallVectorImpl<void *> &mappedAddresses,
+                     llvm::SmallVectorImpl<llvm_ml::BenchmarkResult> &results);
+  llvm::Expected<std::string> compile(std::unique_ptr<llvm::Module> harness);
+
   const llvm::Target *mTarget;
   llvm::StringRef mTripleName;
-  std::unique_ptr<llvm::Module> mModule;
   int mPinnedCPU;
-  size_t mRepeatNoise;
-  size_t mRepeatWorkload;
   int mNumRuns;
   llvm::SmallVector<llvm_ml::BenchmarkResult> mNoiseResults;
   llvm::SmallVector<llvm_ml::BenchmarkResult> mWorkloadResults;
@@ -84,12 +91,12 @@ ParentResT fork(std::function<void()> forkBody,
 static int allocateSharedMemory(const std::string &path, int flag) {
   int mode = [flag]() {
     if ((flag & O_CREAT) != 0) {
-      return S_IRUSR | S_IWUSR | S_IXUSR;
+      return 0666;
     }
     return 0;
   }();
-  int fd = shm_open(path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-  if (errno != 0) {
+  int fd = shm_open(path.c_str(), flag, mode);
+  if (fd == -1) {
     llvm::errs() << "Failed to open shared memory: " << strerror(errno) << "\n";
     llvm::errs() << "Path is " << path << "\n";
     abort();
@@ -152,11 +159,8 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
       res = mmap(pageAddr, PAGE_SIZE, PROT_READ | PROT_WRITE,
                  MAP_SHARED | MAP_FIXED, shmemFD, 0);
     }
-    if (errno != 0) {
-      llvm::errs() << strerror(errno) << "\n";
-    }
     if (!res) {
-      llvm::errs() << "Failed to map address\n";
+      llvm::errs() << "Failed to map address: " << strerror(errno) << "\n";
       abort();
     }
 
@@ -169,6 +173,7 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
         BenchmarkResult result{.hasFailed = false};
         for (const auto &val : values) {
           if (val.type == Counter::Cycles) {
+            llvm::errs() << "Num cycles = " << val.value << "\n";
             result.numCycles = val.value;
           } else if (val.type == Counter::CacheMisses) {
             result.numCacheMisses = val.value;
@@ -183,6 +188,8 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
           }
         }
 
+        llvm::errs() << "Boom " << runId << "\n";
+
         auto *res = reinterpret_cast<BenchmarkResult *>(out);
         res[runId++] = result;
       });
@@ -193,10 +200,18 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
        reinterpret_cast<void *>(&fake_bench), out);
 
   for (int i = 0; i < numRuns; i++) {
+    // Voluntarily give up processor time to get a full CPU slice.
+    std::this_thread::yield();
+    auto start = std::chrono::high_resolution_clock::now();
     fn(counters.get(), reinterpret_cast<void *>(&counters_start),
        reinterpret_cast<void *>(&counters_stop), out);
+    auto end = std::chrono::high_resolution_clock::now();
 
     llvm_ml::flushCounters(counters.get());
+
+    uint64_t duration = std::chrono::nanoseconds(end - start).count();
+    auto *res = reinterpret_cast<BenchmarkResult *>(out);
+    res[i].wallTime = duration;
   }
 
   close(shmemFD);
@@ -259,9 +274,8 @@ static ExitStatus runParent(int child) {
                     .ip = signaledInstruction};
 }
 
-llvm::Error CPUBenchmarkRunner::run() {
-  assert(sizeof(BenchmarkResult) * mNumRuns < PAGE_SIZE);
-
+llvm::Expected<std::string>
+CPUBenchmarkRunner::compile(std::unique_ptr<llvm::Module> module) {
   int objFd = 0;
   llvm::SmallVector<char> objectPathChar;
   llvm::sys::fs::createTemporaryFile("llvm-mc-bench", ".o", objFd,
@@ -276,7 +290,7 @@ llvm::Error CPUBenchmarkRunner::run() {
       mTripleName, "generic", "", llvm::TargetOptions{}, std::nullopt);
 
   auto dl = tm->createDataLayout();
-  mModule->setDataLayout(dl);
+  module->setDataLayout(dl);
 
   llvm::legacy::PassManager pass;
   auto fileType = llvm::CGFT_ObjectFile;
@@ -286,7 +300,7 @@ llvm::Error CPUBenchmarkRunner::run() {
     std::terminate();
   }
 
-  pass.run(*mModule);
+  pass.run(*module);
   objOs.flush();
   objOs.close();
 
@@ -298,9 +312,120 @@ llvm::Error CPUBenchmarkRunner::run() {
   std::string command = "ld -shared -o " + libPath + " " + objPath;
 
   if (std::system(command.c_str()) != 0) {
-    llvm::errs() << "Failed to link dynamic library\n";
-    std::terminate();
+    return llvm::createStringError(std::errc::invalid_argument,
+                                   "Failed to link dynamic library");
   }
+
+  return libPath;
+}
+
+llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
+    const std::string &libPath, const std::string &harnessName, int numRepeat,
+    const std::string &shmemPath, int shmemFD,
+    llvm::SmallVectorImpl<void *> &mappedAddresses,
+    llvm::SmallVectorImpl<llvm_ml::BenchmarkResult> &results) {
+  void *lastSignaledInstruction = nullptr;
+
+  for (unsigned i = 0; i < MAX_FAULTS; i++) {
+    ExitStatus status = fork<ExitStatus>(
+        [&]() {
+          runHarness(libPath, harnessName, mPinnedCPU, shmemPath, 1,
+                     mappedAddresses);
+        },
+        [](int child) -> ExitStatus { return runParent(child); });
+
+    if (status.reason == ExitReason::Unknown) {
+      return llvm::createStringError(std::errc::executable_format_error,
+                                     "Pre-run failed for unknown reason");
+    }
+
+    if (status.reason == ExitReason::Segfault) {
+      if (status.ip == lastSignaledInstruction) {
+        return llvm::createStringError(std::errc::executable_format_error,
+                                       "The same instruction segfaulted twice");
+      }
+
+      if (status.memAddr == nullptr) {
+        return llvm::createStringError(std::errc::executable_format_error,
+                                       "Attempt to access nullptr");
+      }
+
+      lastSignaledInstruction = status.ip;
+
+      mappedAddresses.push_back(status.memAddr);
+    }
+  }
+
+  for (size_t i = 0; i < MAX_FAULTS; i++) {
+    ExitStatus status = fork<ExitStatus>(
+        [&]() {
+          runHarness(libPath, harnessName, mPinnedCPU, shmemPath, mNumRuns,
+                     mappedAddresses);
+        },
+        [](int child) -> ExitStatus { return runParent(child); });
+
+    if (status.reason != ExitReason::Success) {
+      results.push_back(BenchmarkResult{.hasFailed = true});
+      continue;
+    }
+
+    void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                     shmemFD, PAGE_SIZE * 2);
+    auto *res = reinterpret_cast<BenchmarkResult *>(out);
+    for (int j = 0; j < mNumRuns; j++) {
+      results.push_back(res[j]);
+      results.back().numRuns = numRepeat;
+    }
+  }
+
+  return llvm::Error::success();
+}
+
+llvm::Expected<int>
+CPUBenchmarkRunner::check(std::unique_ptr<llvm::Module> harness,
+                          size_t numNoiseRepeat) {
+  assert(sizeof(BenchmarkResult) * mNumRuns < PAGE_SIZE);
+
+  auto maybeLibPath = compile(std::move(harness));
+
+  if (!maybeLibPath)
+    return maybeLibPath.takeError();
+
+  std::string shmemPath =
+      llvm::formatv("/llvm-mc-bench-{0}-{1}.shmem", getpid(), rand());
+
+  int shmemFD = allocateSharedMemory(shmemPath, O_RDWR | O_CREAT | O_EXCL);
+  auto shmemRemove =
+      llvm::make_scope_exit([&]() { shm_unlink(shmemPath.c_str()); });
+
+  llvm::SmallVector<void *> mappedAddresses;
+  llvm::SmallVector<llvm_ml::BenchmarkResult> results;
+
+  if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kBaselineNoiseName,
+                                    numNoiseRepeat, shmemPath, shmemFD,
+                                    mappedAddresses, results))
+    return err;
+
+  const auto minEltPred = [](const auto &lhs, const auto &rhs) {
+    return lhs.numCycles < rhs.numCycles;
+  };
+
+  auto minNoise = std::min_element(results.begin(), results.end(), minEltPred);
+
+  uint64_t avgNSPerIter = minNoise->wallTime / minNoise->numRuns;
+  int numRepeat = static_cast<int>((kTimeSliceNS / avgNSPerIter) * 0.8f);
+
+  return numRepeat;
+}
+
+llvm::Error CPUBenchmarkRunner::run(std::unique_ptr<llvm::Module> harness,
+                                    size_t numNoiseRepeat, size_t numRepeat) {
+  assert(sizeof(BenchmarkResult) * mNumRuns < PAGE_SIZE);
+
+  auto maybeLibPath = compile(std::move(harness));
+
+  if (!maybeLibPath)
+    return maybeLibPath.takeError();
 
   std::string shmemPath = llvm::formatv("/llvm-mc-bench-{0}.shmem", getpid());
 
@@ -310,72 +435,13 @@ llvm::Error CPUBenchmarkRunner::run() {
 
   llvm::SmallVector<void *> mappedAddresses;
 
-  const auto runBenchmark =
-      [&](const std::string &harnessName, int pinnedCPU,
-          llvm::SmallVectorImpl<llvm_ml::BenchmarkResult> &results)
-      -> llvm::Error {
-    void *lastSignaledInstruction = nullptr;
-
-    for (unsigned i = 0; i < MAX_FAULTS; i++) {
-      ExitStatus status = fork<ExitStatus>(
-          [&]() {
-            runHarness(libPath, harnessName, pinnedCPU, shmemPath, 1,
-                       mappedAddresses);
-          },
-          [](int child) -> ExitStatus { return runParent(child); });
-
-      if (status.reason == ExitReason::Unknown) {
-        return llvm::createStringError(std::errc::executable_format_error,
-                                       "Pre-run failed for unknown reason");
-      }
-
-      if (status.reason == ExitReason::Segfault) {
-        if (status.ip == lastSignaledInstruction) {
-          return llvm::createStringError(
-              std::errc::executable_format_error,
-              "The same instruction segfaulted twice");
-        }
-
-        if (status.memAddr == nullptr) {
-          return llvm::createStringError(std::errc::executable_format_error,
-                                         "Attempt to access nullptr");
-        }
-
-        lastSignaledInstruction = status.ip;
-
-        mappedAddresses.push_back(status.memAddr);
-      }
-    }
-
-    for (size_t i = 0; i < MAX_FAULTS; i++) {
-      ExitStatus status = fork<ExitStatus>(
-          [&]() {
-            runHarness(libPath, harnessName, pinnedCPU, shmemPath, mNumRuns,
-                       mappedAddresses);
-          },
-          [](int child) -> ExitStatus { return runParent(child); });
-
-      if (status.reason != ExitReason::Success) {
-        llvm::errs() << "Run failed\n";
-        continue;
-        results.push_back(BenchmarkResult{.hasFailed = true});
-      }
-
-      void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                       shmemFD, PAGE_SIZE * 2);
-      auto *res = reinterpret_cast<BenchmarkResult *>(out);
-      for (int j = 0; j < mNumRuns; j++)
-        results.push_back(res[j]);
-    }
-
-    return llvm::Error::success();
-  };
-
-  if (auto err =
-          runBenchmark(llvm_ml::kBaselineNoiseName, mPinnedCPU, mNoiseResults))
+  if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kBaselineNoiseName,
+                                    numNoiseRepeat, shmemPath, shmemFD,
+                                    mappedAddresses, mNoiseResults))
     return err;
-  if (auto err =
-          runBenchmark(llvm_ml::kWorkloadName, mPinnedCPU, mWorkloadResults))
+  if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kWorkloadName,
+                                    numRepeat, shmemPath, shmemFD,
+                                    mappedAddresses, mWorkloadResults))
     return err;
 
   return llvm::Error::success();
@@ -384,12 +450,9 @@ llvm::Error CPUBenchmarkRunner::run() {
 namespace llvm_ml {
 std::unique_ptr<BenchmarkRunner>
 createCPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                         std::unique_ptr<llvm::Module> module, int pinnedCPU,
-                         size_t repeatNoise, size_t repeatWorkload,
-                         int numRuns) {
+                         int pinnedCPU, int numRuns) {
   assert(target);
-  return std::make_unique<CPUBenchmarkRunner>(
-      target, tripleName, std::move(module), pinnedCPU, repeatNoise,
-      repeatWorkload, numRuns);
+  return std::make_unique<CPUBenchmarkRunner>(target, tripleName, pinnedCPU,
+                                              numRuns);
 }
 } // namespace llvm_ml

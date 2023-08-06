@@ -54,7 +54,9 @@ struct BenchmarkResult {
       0; ///< number of micro-operations retired, may be 0 on some platforms
   uint64_t numInstructions = 0; ///< number of HW instructions retired
   uint64_t numMisalignedLoads = 0;
-  uint64_t numRuns = 0;
+  uint64_t numRuns = 0; ///< The number of basic block repetitions
+  uint64_t wallTime =
+      0; ///< The number of nanoseconds it roughly took to execute the harness
 };
 
 inline Measurement operator-(const BenchmarkResult &wl,

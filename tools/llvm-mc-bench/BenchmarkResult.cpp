@@ -60,6 +60,8 @@ static json toJSON(const BenchmarkResult &res) {
   resJson["uops"] = res.numMicroOps;
   resJson["instructions"] = res.numInstructions;
   resJson["misaligned_loads"] = res.numMisalignedLoads;
+  resJson["num_repeat"] = res.numRuns;
+  resJson["wall_time_ns"] = res.wallTime;
 
   return resJson;
 }
