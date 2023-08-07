@@ -36,8 +36,8 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: tools
-        path: bazel-bin/llvm_ml_tools.tar.zst 
+        path: bazel-out/k8-fastbuild/bin/llvm_ml_tools.tar.zst 
     - uses: actions/upload-artifact@v3
       with:
         name: python_wheel
-        path: bazel-bin/llvm_ml-*.whl
+        path: bazel-out/k8-fastbuild/bin/llvm_ml-*.whl

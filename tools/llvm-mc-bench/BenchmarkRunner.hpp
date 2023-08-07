@@ -19,7 +19,10 @@ struct BenchmarkResult;
 
 class BenchmarkRunner {
 public:
-  virtual llvm::Error run() = 0;
+  virtual llvm::Error run(std::unique_ptr<llvm::Module> harness,
+                          size_t numNoiseRepeat, size_t numRepeat) = 0;
+  virtual llvm::Expected<int> check(std::unique_ptr<llvm::Module> harness,
+                                    size_t numNoiseRepeat) = 0;
   virtual llvm::ArrayRef<BenchmarkResult> getNoiseResults() const = 0;
   virtual llvm::ArrayRef<BenchmarkResult> getWorkloadResults() const = 0;
 
@@ -28,7 +31,5 @@ public:
 
 std::unique_ptr<BenchmarkRunner>
 createCPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                         std::unique_ptr<llvm::Module> harness, int pinnedCPU,
-                         size_t repeatNoise, size_t repeatWorkload,
-                         int numRuns);
+                         int pinnedCPU, int numRuns);
 } // namespace llvm_ml
