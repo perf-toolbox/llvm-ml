@@ -1,3 +1,4 @@
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 load("@rules_python//python:packaging.bzl", "py_wheel")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_filegroup", "pkg_files", "pkg_mkdirs", "strip_prefix")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
@@ -26,4 +27,10 @@ pkg_tar(
     ],
     compressor = "@llvm_zstd//:zstd-cli",
     extension = "tar.zst",
+)
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    exclude_external_sources = True,
+    exclude_headers = "external"
 )

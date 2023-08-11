@@ -1,4 +1,3 @@
-load("//bazel:utils.bzl", "runfiles")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
 load("@pip//:requirements.bzl", "requirement")
@@ -33,11 +32,6 @@ py_binary(
     "bhive-import/main.py"
   ],
   main = "bhive-import/main.py",
-)
-
-runfiles(
-  name = "llvm-mc",
-  deps = ["@llvm-project//llvm:llvm-mc"]
 )
 
 cc_binary(
