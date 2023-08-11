@@ -12,9 +12,7 @@
 namespace llvm_ml {
 std::unique_ptr<BenchmarkRunner>
 createCPUBenchmarkRunner(const llvm::Target *target, llvm::StringRef tripleName,
-                         std::unique_ptr<llvm::Module> module, int pinnedCPU,
-                         size_t repeatNoise, size_t repeatWorkload,
-                         int numRuns) {
+                         int pinnedCPU, int numRuns) {
   llvm_unreachable("Not implemented");
 }
 } // namespace llvm_ml
