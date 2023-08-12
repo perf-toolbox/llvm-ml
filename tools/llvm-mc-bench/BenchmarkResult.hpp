@@ -7,6 +7,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
@@ -33,12 +34,12 @@ struct Measurement {
   uint64_t noiseInstructions;
   uint64_t noiseNumRuns;
 
-  void exportBinary(std::filesystem::path path, llvm::StringRef source,
-                    llvm::ArrayRef<BenchmarkResult> noise,
-                    llvm::ArrayRef<BenchmarkResult> workload);
-  void exportJSON(std::filesystem::path path, llvm::StringRef source,
-                  llvm::ArrayRef<BenchmarkResult> noise,
-                  llvm::ArrayRef<BenchmarkResult> workload);
+  llvm::Error exportBinary(std::filesystem::path path, llvm::StringRef source,
+                           llvm::ArrayRef<BenchmarkResult> noise,
+                           llvm::ArrayRef<BenchmarkResult> workload);
+  llvm::Error exportJSON(std::filesystem::path path, llvm::StringRef source,
+                         llvm::ArrayRef<BenchmarkResult> noise,
+                         llvm::ArrayRef<BenchmarkResult> workload);
 };
 
 /// BenchmarkResult is a result of a single harrness run, whether it is a noise
