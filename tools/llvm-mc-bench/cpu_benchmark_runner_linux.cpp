@@ -410,7 +410,12 @@ CPUBenchmarkRunner::check(std::unique_ptr<llvm::Module> harness,
 
   auto minNoise = std::min_element(results.begin(), results.end(), minEltPred);
 
-  uint64_t avgNSPerIter = minNoise->wallTime / minNoise->numRuns;
+  float avgNSPerIter = static_cast<float>(minNoise->wallTime) /
+                       static_cast<float>(minNoise->numRuns);
+
+  if (std::abs(avgNSPerIter) < 10))
+    return llvm::createStringError(std::errc::invalid_argument, "Workload was too short");
+
   int numRepeat = static_cast<int>((kTimeSliceNS / avgNSPerIter) * 0.8f);
 
   return numRepeat;
