@@ -1,5 +1,6 @@
 module(name = "llvm-ml", version = "0.1")
 
+bazel_dep(name = "bazel_skylib", version = "1.4.2")
 bazel_dep(name = "rules_cc", version = "0.0.6")
 bazel_dep(name = "rules_python", version = "0.24.0")
 bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
@@ -7,12 +8,19 @@ bazel_dep(name = "platforms", version = "0.0.6")
 bazel_dep(name = "llvm-ml-py", version = "0.0.1")
 bazel_dep(name = "llvm-ml-libs", version = "0.0.1")
 bazel_dep(name = "rules_pkg", version = "0.9.1")
+bazel_dep(name = "nlohmann_json", version = "3.11.2")
+
+non_module_dependencies = use_extension("//bazel:extensions.bzl", "non_module_dependencies")
+use_repo(non_module_dependencies, "llvm-raw", "llvm_zlib", "llvm_zstd")
+
+llvm = use_extension("//bazel:llvm.bzl", "init_llvm")
+use_repo(llvm, "llvm-project")
 
 local_path_override(module_name = "llvm-ml-py", path = "python")
 local_path_override(module_name = "llvm-ml-libs", path = "lib")
 
-non_module_dependencies = use_extension("@llvm-ml-libs//:extensions.bzl", "non_module_dependencies")
-use_repo(non_module_dependencies, "capnp-cpp")
+capnp = use_extension("@llvm-ml-libs//:extensions.bzl", "non_module_dependencies")
+use_repo(capnp, "capnp-cpp")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
