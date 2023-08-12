@@ -37,6 +37,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -45,6 +46,7 @@
 
 #include <filesystem>
 #include <indicators/indicators.hpp>
+#include <iostream>
 
 namespace fs = std::filesystem;
 using namespace llvm;
@@ -93,6 +95,15 @@ static cl::opt<std::string>
 static cl::opt<std::string>
     LogFile("log-file", cl::desc("Path to a file to log errors in batch mode"),
             cl::cat(ToolOptions));
+
+static void clearTerminalColors() {
+  indicators::show_console_cursor(true);
+  std::cout << termcolor::reset;
+}
+
+static void signalHandler(void *) { clearTerminalColors(); }
+
+static void interruptHandler() { clearTerminalColors(); }
 
 static const Target *getTarget() {
   // Figure out the target triple.
@@ -308,6 +319,9 @@ int main(int argc, char **argv) {
   InitializeAllAsmPrinters();
 
   cl::ParseCommandLineOptions(argc, argv, "benchmark ASM basic blocks\n");
+
+  sys::AddSignalHandler(signalHandler, nullptr);
+  sys::SetInterruptFunction(interruptHandler);
 
   const Target *target = getTarget();
 
