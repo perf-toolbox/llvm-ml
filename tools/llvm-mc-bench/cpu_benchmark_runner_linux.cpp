@@ -16,10 +16,13 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+#include <bit>
 #include <chrono>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <functional>
+#include <linux/memfd.h>
+#include <linux/mman.h>
 #include <string>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
@@ -29,6 +32,7 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <thread>
+#include <utility>
 
 constexpr unsigned MAX_FAULTS = 30;
 constexpr uint64_t kTimeSliceNS = 1'000'000;
@@ -59,7 +63,7 @@ public:
 private:
   llvm::Error
   runSingleBenchmark(const std::string &libPath, const std::string &harnessName,
-                     int numRepeat, const std::string &shmemPath, int shmemFD,
+                     int numRepeat,
                      llvm::SmallVectorImpl<void *> &mappedAddresses,
                      llvm::SmallVectorImpl<llvm_ml::BenchmarkResult> &results);
   llvm::Expected<std::string> compile(std::unique_ptr<llvm::Module> harness);
@@ -88,32 +92,32 @@ ParentResT fork(std::function<void()> forkBody,
   llvm_unreachable("Failed to fork");
 }
 
-static int allocateSharedMemory(const std::string &path, int flag) {
-  int mode = [flag]() {
-    if ((flag & O_CREAT) != 0) {
-      return 0600;
-    }
-    return 0;
-  }();
-  int fd = shm_open(path.c_str(), flag, mode);
-  if (fd == -1) {
-    llvm::errs() << "Failed to open shared memory: " << strerror(errno) << "\n";
-    llvm::errs() << "Path is " << path << "\n";
-    abort();
-  }
-  if (mode != 0 && ftruncate(fd, 4 * PAGE_SIZE) != 0) {
-    llvm::errs() << "Failed to truncate shmem file: " << strerror(errno)
-                 << "\n";
-    llvm::errs() << "Path is " << path << "\n";
-    abort();
-  }
-  return fd;
+static void *allocateSharedMemory() {
+  constexpr int protection = PROT_READ | PROT_WRITE;
+  constexpr int visibility = MAP_SHARED | MAP_ANONYMOUS;
+
+  return mmap(nullptr, PAGE_SIZE, protection, visibility, -1, 0);
 }
 
 static void fake_bench(void *) {}
 
+static std::pair<int, unsigned> allocatePhysicalPage() {
+  int fd = memfd_create("shmem", 0);
+  if (fd == -1) {
+    llvm::errs() << "Failed to allocate physical page\n";
+    abort();
+  }
+  if (ftruncate(fd, 4 * sysconf(_SC_PAGE_SIZE)) != 0) {
+    llvm::errs() << "Failed to truncate shmem file: " << strerror(errno)
+                 << "\n";
+    abort();
+  }
+
+  return {fd, sysconf(_SC_PAGE_SIZE)};
+}
+
 static void runHarness(llvm::StringRef libPath, std::string harnessName,
-                       int pinnedCPU, const std::string &shmemPath, int numRuns,
+                       int pinnedCPU, void *out, int numRuns,
                        llvm::ArrayRef<void *> addresses) {
   // FIXME(Alex): there must be a better way to wait for parent to become
   // ready
@@ -143,23 +147,24 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
   // LLVM installs its own segfault handler. We don't need that.
   signal(SIGSEGV, SIG_DFL);
 
-  int shmemFD = allocateSharedMemory(shmemPath, O_RDWR);
-  void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                   shmemFD, PAGE_SIZE * 2);
+  auto [shmemFD, pageSize] = allocatePhysicalPage();
+
+  constexpr int flags = MAP_PRIVATE | MAP_FIXED;
 
   for (auto addr : addresses) {
     void *res = nullptr;
-    if (addr == (void *)0x2325000) {
-      res = mmap(addr, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                 MAP_SHARED | MAP_FIXED, shmemFD, PAGE_SIZE);
-    } else {
-      // FIXME(Alex): 12 should be std::bit_width(PAGE_ADDR)
-      size_t shift = reinterpret_cast<size_t>(addr) >> 12;
-      void *pageAddr = reinterpret_cast<void *>(shift << 12);
-      res = mmap(pageAddr, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                 MAP_SHARED | MAP_FIXED, shmemFD, 0);
+    size_t shift = reinterpret_cast<size_t>(addr) >> std::bit_width(pageSize);
+    void *pageAddr =
+        reinterpret_cast<void *>(shift << std::bit_width(pageSize));
+    res =
+        mmap(pageAddr, 4 * pageSize, PROT_READ | PROT_WRITE, flags, shmemFD, 0);
+    if (res != pageAddr) {
+      llvm::errs() << "Requested address " << pageAddr << " got " << res
+                   << " shift " << std::bit_width(pageSize) << "\n";
+      abort();
     }
-    if (!res) {
+
+    if (res == nullptr || res == reinterpret_cast<void *>(0xffffffffffffffff)) {
       llvm::errs() << "Failed to map address: " << strerror(errno) << "\n";
       abort();
     }
@@ -211,7 +216,6 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     res[i].wallTime = duration;
   }
 
-  close(shmemFD);
   _exit(0);
 }
 
@@ -317,16 +321,16 @@ CPUBenchmarkRunner::compile(std::unique_ptr<llvm::Module> module) {
 
 llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
     const std::string &libPath, const std::string &harnessName, int numRepeat,
-    const std::string &shmemPath, int shmemFD,
     llvm::SmallVectorImpl<void *> &mappedAddresses,
     llvm::SmallVectorImpl<llvm_ml::BenchmarkResult> &results) {
   void *lastSignaledInstruction = nullptr;
 
+  void *out = allocateSharedMemory();
+
   for (unsigned i = 0; i < MAX_FAULTS; i++) {
     ExitStatus status = fork<ExitStatus>(
         [&]() {
-          runHarness(libPath, harnessName, mPinnedCPU, shmemPath, 1,
-                     mappedAddresses);
+          runHarness(libPath, harnessName, mPinnedCPU, out, 1, mappedAddresses);
         },
         [](int child) -> ExitStatus { return runParent(child); });
 
@@ -355,7 +359,7 @@ llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
   for (size_t i = 0; i < MAX_FAULTS; i++) {
     ExitStatus status = fork<ExitStatus>(
         [&]() {
-          runHarness(libPath, harnessName, mPinnedCPU, shmemPath, mNumRuns,
+          runHarness(libPath, harnessName, mPinnedCPU, out, mNumRuns,
                      mappedAddresses);
         },
         [](int child) -> ExitStatus { return runParent(child); });
@@ -365,8 +369,6 @@ llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
       continue;
     }
 
-    void *out = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                     shmemFD, PAGE_SIZE * 2);
     auto *res = reinterpret_cast<BenchmarkResult *>(out);
     for (int j = 0; j < mNumRuns; j++) {
       results.push_back(res[j]);
@@ -389,19 +391,11 @@ CPUBenchmarkRunner::check(std::unique_ptr<llvm::Module> harness,
   auto rmLib =
       llvm::make_scope_exit([&] { llvm::sys::fs::remove(*maybeLibPath); });
 
-  std::string shmemPath =
-      llvm::formatv("/llvm-mc-bench-{0}-{1}.shmem", getpid(), rand());
-
-  int shmemFD = allocateSharedMemory(shmemPath, O_RDWR | O_CREAT | O_EXCL);
-  auto shmemRemove =
-      llvm::make_scope_exit([&]() { shm_unlink(shmemPath.c_str()); });
-
   llvm::SmallVector<void *> mappedAddresses;
   llvm::SmallVector<llvm_ml::BenchmarkResult> results;
 
   if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kBaselineNoiseName,
-                                    numNoiseRepeat, shmemPath, shmemFD,
-                                    mappedAddresses, results))
+                                    numNoiseRepeat, mappedAddresses, results))
     return err;
 
   const auto minEltPred = [](const auto &lhs, const auto &rhs) {
@@ -428,21 +422,15 @@ llvm::Error CPUBenchmarkRunner::run(std::unique_ptr<llvm::Module> harness,
   auto rmLib =
       llvm::make_scope_exit([&] { llvm::sys::fs::remove(*maybeLibPath); });
 
-  std::string shmemPath = llvm::formatv("/llvm-mc-bench-{0}.shmem", getpid());
-
-  int shmemFD = allocateSharedMemory(shmemPath, O_RDWR | O_CREAT | O_EXCL);
-  auto shmemRemove =
-      llvm::make_scope_exit([&]() { shm_unlink(shmemPath.c_str()); });
-
   llvm::SmallVector<void *> mappedAddresses;
 
-  if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kBaselineNoiseName,
-                                    numNoiseRepeat, shmemPath, shmemFD,
-                                    mappedAddresses, mNoiseResults))
+  if (auto err =
+          runSingleBenchmark(*maybeLibPath, llvm_ml::kBaselineNoiseName,
+                             numNoiseRepeat, mappedAddresses, mNoiseResults))
     return err;
-  if (auto err = runSingleBenchmark(*maybeLibPath, llvm_ml::kWorkloadName,
-                                    numRepeat, shmemPath, shmemFD,
-                                    mappedAddresses, mWorkloadResults))
+  if (auto err =
+          runSingleBenchmark(*maybeLibPath, llvm_ml::kWorkloadName, numRepeat,
+                             mappedAddresses, mWorkloadResults))
     return err;
 
   return llvm::Error::success();
