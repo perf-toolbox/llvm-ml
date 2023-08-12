@@ -48,7 +48,7 @@ def main():
 
     # Run lit.
     try:
-        subprocess.check_call(args=args + parsed_args.lit_args, env=env, timeout=10)
+        subprocess.check_call(args=args + parsed_args.lit_args, env=env)
     except subprocess.CalledProcessError as e:
         # Print without the stack trace.
         exit(e)
