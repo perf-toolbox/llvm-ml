@@ -21,7 +21,39 @@
 namespace llvm_ml {
 class CountersContext {
 public:
-  CountersContext(CountersCb cb) : mCB(cb) {
+  virtual void start() = 0;
+  virtual void stop() = 0;
+  virtual void flush() = 0;
+
+  virtual ~CountersContext() = default;
+};
+
+class DummyCounters : public CountersContext {
+public:
+  DummyCounters(CountersCb cb) : mCB(cb) {}
+
+  void start() override {}
+  void stop() override {}
+
+  void flush() override {
+    llvm::SmallVector<CounterValue> counters;
+    counters.push_back(CounterValue{.type = Counter::Cycles, .value = 10});
+    counters.push_back(
+        CounterValue{.type = Counter::Instructions, .value = 20});
+    counters.push_back(CounterValue{.type = Counter::CacheMisses, .value = 0});
+    counters.push_back(
+        CounterValue{.type = Counter::ContextSwitches, .value = 0});
+
+    mCB(counters);
+  }
+
+private:
+  CountersCb mCB;
+};
+
+class PMUCountersContext : public CountersContext {
+public:
+  PMUCountersContext(CountersCb cb) : mCB(cb) {
     pmu::Builder builder;
     builder.add_counter(pmu::CounterKind::Cycles)
         .add_counter(pmu::CounterKind::Instructions)
@@ -30,11 +62,11 @@ public:
     mCounters = builder.build();
   }
 
-  void start() { mCounters->start(); }
+  void start() override { mCounters->start(); }
 
-  void stop() { mCounters->stop(); }
+  void stop() override { mCounters->stop(); }
 
-  void flush() {
+  void flush() override {
     llvm::SmallVector<CounterValue> counters;
 
     for (auto value : *mCounters) {
@@ -60,8 +92,6 @@ public:
     mCB(counters);
   }
 
-  ~CountersContext() = default;
-
 private:
   CountersCb mCB;
   std::unique_ptr<pmu::Counters> mCounters;
@@ -70,7 +100,10 @@ private:
 void flushCounters(CountersContext *ctx) { ctx->flush(); }
 
 std::shared_ptr<CountersContext> createCounters(CountersCb cb) {
-  return std::make_shared<CountersContext>(std::move(cb));
+  if (std::getenv("LLVM_ML_BENCH_MOCK") != nullptr)
+    return std::make_shared<DummyCounters>(std::move(cb));
+
+  return std::make_shared<PMUCountersContext>(std::move(cb));
 }
 
 } // namespace llvm_ml

@@ -43,11 +43,12 @@ def main():
     for tool in ("env", "grep", "python3", "sh", "which"):
         system_tools.joinpath(tool).symlink_to(shutil.which(tool))
     env = os.environ.copy()
-    env["PATH"] = str(system_tools)
+    # FIXME(Alex): we should seal POSIX toolchian
+    # env["PATH"] = str(system_tools)
 
     # Run lit.
     try:
-        subprocess.check_call(args=args + parsed_args.lit_args, env=env)
+        subprocess.check_call(args=args + parsed_args.lit_args, env=env, timeout=10)
     except subprocess.CalledProcessError as e:
         # Print without the stack trace.
         exit(e)

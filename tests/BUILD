@@ -25,6 +25,7 @@ glob_lit_tests(
         "//utils:mc-harness-dump",
         "//utils:mc-data-gen",
         "//tools:llvm-mc-dataset",
+        "//tools:llvm-mc-bench",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:count",
         "@llvm-project//llvm:not",

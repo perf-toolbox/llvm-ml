@@ -61,6 +61,7 @@ utils = [
 
 tools = [
     ToolSubst('%llvm-mc-dataset', FindTool('llvm-mc-dataset')),
+    ToolSubst('%llvm-mc-bench', FindTool('llvm-mc-bench')),
 ]
 
 llvm_config.add_tool_substitutions(llvm_tools, config.llvm_tools_dir)
@@ -79,6 +80,8 @@ known_arches = ["x86_64", "mips64", "ppc64", "aarch64"]
 if (config.host_ldflags.find("-m32") < 0
     and any(config.llvm_host_triple.startswith(x) for x in known_arches)):
   config.available_features.add("llvm-64-bits")
+
+config.available_features.add(platform.machine())
 
 config.available_features.add("host-byteorder-" + sys.byteorder + "-endian")
 
