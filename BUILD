@@ -27,6 +27,7 @@ pkg_tar(
     ],
     compressor = "@llvm_zstd//:zstd-cli",
     extension = "tar.zst",
+    tags = ["manual"],
 )
 
 refresh_compile_commands(

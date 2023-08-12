@@ -33,6 +33,8 @@ jobs:
       run: bazel build --config=ci //...
     - name: lit tests
       run: bazel test --config=ci //tests/...
+    - name: generate tools archive
+      run: bazel build --config=ci //:llvm_ml_tools
     - uses: actions/upload-artifact@v3
       with:
         name: tools
