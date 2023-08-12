@@ -31,7 +31,7 @@
 #include <thread>
 
 constexpr unsigned MAX_FAULTS = 30;
-constexpr uint64_t kTimeSliceNS = 3'000'000;
+constexpr uint64_t kTimeSliceNS = 1'000'000;
 
 using namespace llvm_ml;
 
