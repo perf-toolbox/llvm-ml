@@ -31,6 +31,7 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ThreadPool.h"
@@ -71,6 +72,15 @@ static cl::opt<bool>
                     cl::desc("Only run postprocessing on extracted data"));
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
+
+static void clearTerminalColors() {
+  indicators::show_console_cursor(true);
+  std::cout << termcolor::reset;
+}
+
+static void signalHandler(void *) { clearTerminalColors(); }
+
+static void interruptHandler() { clearTerminalColors(); }
 
 static const Target *getTarget(const object::ObjectFile *Obj) {
   // Figure out the target triple.
@@ -413,6 +423,9 @@ int main(int argc, char **argv) {
 
   cl::ParseCommandLineOptions(argc, argv,
                               "extract asm basic blocks from binary\n");
+
+  sys::AddSignalHandler(signalHandler, nullptr);
+  sys::SetInterruptFunction(interruptHandler);
 
   sys::fs::file_status status;
   std::error_code err = sys::fs::status(OutputDirectory, status);

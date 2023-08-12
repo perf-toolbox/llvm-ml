@@ -29,6 +29,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ThreadPool.h"
@@ -47,6 +48,15 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+static void clearTerminalColors() {
+  indicators::show_console_cursor(true);
+  std::cout << termcolor::reset;
+}
+
+static void signalHandler(void *) { clearTerminalColors(); }
+
+static void interruptHandler() { clearTerminalColors(); }
 
 struct NodeFeatures {
   uint32_t opcode = 0; ///< Opcode of the instruction
@@ -363,6 +373,9 @@ int main(int argc, char **argv) {
 
   llvm::cl::ParseCommandLineOptions(argc, argv,
                                     "convert assembly to ML embeddings\n");
+
+  llvm::sys::AddSignalHandler(signalHandler, nullptr);
+  llvm::sys::SetInterruptFunction(interruptHandler);
 
   const llvm::Target *target = getTarget("");
 
