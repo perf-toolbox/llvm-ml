@@ -105,6 +105,7 @@ static int allocateSharedMemory(const std::string &path, int flag) {
     llvm::errs() << "Failed to truncate shmem file: " << strerror(errno)
                  << "\n";
     llvm::errs() << "Path is " << path << "\n";
+    abort();
   }
   return fd;
 }
@@ -136,9 +137,8 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     exit(1);
   }
   struct sched_param schedParam = {.sched_priority = 90};
-  if (sched_setscheduler(0, SCHED_FIFO, &schedParam) < 0) {
-    llvm::errs() << "WARNING: failed to update scheduler policy\n";
-  }
+  // Silently ignore return error in non-root mode
+  sched_setscheduler(0, SCHED_FIFO, &schedParam);
 
   // LLVM installs its own segfault handler. We don't need that.
   signal(SIGSEGV, SIG_DFL);
@@ -173,7 +173,6 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
         BenchmarkResult result{.hasFailed = false};
         for (const auto &val : values) {
           if (val.type == Counter::Cycles) {
-            llvm::errs() << "Num cycles = " << val.value << "\n";
             result.numCycles = val.value;
           } else if (val.type == Counter::CacheMisses) {
             result.numCacheMisses = val.value;
@@ -187,8 +186,6 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
             result.numMisalignedLoads = val.value;
           }
         }
-
-        llvm::errs() << "Boom " << runId << "\n";
 
         auto *res = reinterpret_cast<BenchmarkResult *>(out);
         res[runId++] = result;

@@ -30,7 +30,7 @@ using CountersCb = std::function<void(llvm::ArrayRef<CounterValue>)>;
 class CountersContext;
 
 void flushCounters(CountersContext *ctx);
-std::shared_ptr<CountersContext> createCounters(const CountersCb &cb);
+std::shared_ptr<CountersContext> createCounters(CountersCb cb);
 } // namespace llvm_ml
 
 extern "C" {

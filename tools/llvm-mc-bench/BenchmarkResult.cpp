@@ -26,9 +26,10 @@ static void toCapNProto(const BenchmarkResult &res, MCSample::Builder sample) {
   sample.setNumRepeat(res.numRuns);
 }
 
-void Measurement::exportBinary(fs::path path, llvm::StringRef source,
-                               llvm::ArrayRef<BenchmarkResult> noise,
-                               llvm::ArrayRef<BenchmarkResult> workload) {
+llvm::Error
+Measurement::exportBinary(fs::path path, llvm::StringRef source,
+                          llvm::ArrayRef<BenchmarkResult> noise,
+                          llvm::ArrayRef<BenchmarkResult> workload) {
   capnp::MallocMessageBuilder message;
   MCMetrics::Builder metrics = message.initRoot<llvm_ml::MCMetrics>();
   metrics.setMeasuredCycles(measuredCycles);
@@ -49,6 +50,8 @@ void Measurement::exportBinary(fs::path path, llvm::StringRef source,
   llvm::for_each(llvm::enumerate(workload), converter(workloadSamples));
 
   llvm_ml::writeToFile(path, message);
+
+  return llvm::Error::success();
 }
 
 static json toJSON(const BenchmarkResult &res) {
@@ -66,12 +69,15 @@ static json toJSON(const BenchmarkResult &res) {
   return resJson;
 }
 
-void Measurement::exportJSON(std::filesystem::path path, llvm::StringRef source,
-                             llvm::ArrayRef<BenchmarkResult> noise,
-                             llvm::ArrayRef<BenchmarkResult> workload) {
+llvm::Error Measurement::exportJSON(std::filesystem::path path,
+                                    llvm::StringRef source,
+                                    llvm::ArrayRef<BenchmarkResult> noise,
+                                    llvm::ArrayRef<BenchmarkResult> workload) {
   std::error_code ec;
   llvm::raw_fd_ostream os(path.c_str(), ec);
-  // TODO check ec and return an error
+
+  if (ec)
+    return llvm::createStringError(ec, "Failed to open file %s", path.c_str());
 
   json res;
   res["noise_cycles"] = noiseCycles;
@@ -100,6 +106,8 @@ void Measurement::exportJSON(std::filesystem::path path, llvm::StringRef source,
   res["workload_samples"] = workloadSamples;
 
   os << res.dump(4);
+
+  return llvm::Error::success();
 }
 
 BenchmarkResult avg(llvm::ArrayRef<BenchmarkResult> inputs) {

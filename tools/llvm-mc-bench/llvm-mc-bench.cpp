@@ -194,13 +194,11 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
   llvm_ml::Measurement m = *minWorkload - *minNoise;
 
   if (ReadableJSON) {
-    m.exportJSON(output, (*buffer)->getBuffer(), noiseResults, workloadResults);
-  } else {
-    m.exportBinary(output, (*buffer)->getBuffer(), noiseResults,
-                   workloadResults);
+    return m.exportJSON(output, (*buffer)->getBuffer(), noiseResults,
+                        workloadResults);
   }
-
-  return Error::success();
+  return m.exportBinary(output, (*buffer)->getBuffer(), noiseResults,
+                        workloadResults);
 }
 
 int runBatch(fs::path input, fs::path output, const Target *target) {

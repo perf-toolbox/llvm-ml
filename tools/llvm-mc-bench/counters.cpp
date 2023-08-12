@@ -21,7 +21,7 @@
 namespace llvm_ml {
 class CountersContext {
 public:
-  CountersContext(const CountersCb &cb) : mCB(cb) {
+  CountersContext(CountersCb cb) : mCB(cb) {
     pmu::Builder builder;
     builder.add_counter(pmu::CounterKind::Cycles)
         .add_counter(pmu::CounterKind::Instructions)
@@ -38,19 +38,19 @@ public:
     llvm::SmallVector<CounterValue> counters;
 
     for (auto value : *mCounters) {
-      if (value.name == "cycles") {
+      if (value.name.starts_with("cycles")) {
         counters.push_back(
             CounterValue{.type = Counter::Cycles,
                          .value = static_cast<size_t>(value.value)});
-      } else if (value.name == "instructions") {
+      } else if (value.name.starts_with("instructions")) {
         counters.push_back(
             CounterValue{.type = Counter::Instructions,
                          .value = static_cast<size_t>(value.value)});
-      } else if (value.name == "cache_misses") {
+      } else if (value.name.starts_with("cache_misses")) {
         counters.push_back(
             CounterValue{.type = Counter::CacheMisses,
                          .value = static_cast<size_t>(value.value)});
-      } else if (value.name == "SW:context_switches") {
+      } else if (value.name.starts_with("SW:context_switches")) {
         counters.push_back(
             CounterValue{.type = Counter::ContextSwitches,
                          .value = static_cast<size_t>(value.value)});
@@ -69,8 +69,8 @@ private:
 
 void flushCounters(CountersContext *ctx) { ctx->flush(); }
 
-std::shared_ptr<CountersContext> createCounters(const CountersCb &cb) {
-  return std::make_shared<CountersContext>(cb);
+std::shared_ptr<CountersContext> createCounters(CountersCb cb) {
+  return std::make_shared<CountersContext>(std::move(cb));
 }
 
 } // namespace llvm_ml
