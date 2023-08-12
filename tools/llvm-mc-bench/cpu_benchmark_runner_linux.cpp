@@ -91,7 +91,7 @@ ParentResT fork(std::function<void()> forkBody,
 static int allocateSharedMemory(const std::string &path, int flag) {
   int mode = [flag]() {
     if ((flag & O_CREAT) != 0) {
-      return 0666;
+      return 0600;
     }
     return 0;
   }();
@@ -304,7 +304,6 @@ CPUBenchmarkRunner::compile(std::unique_ptr<llvm::Module> module) {
   llvm::SmallVector<char> libPathChar;
   llvm::sys::fs::createUniquePath("llvm-mc-bench-%%%%%%.so", libPathChar, true);
   std::string libPath{libPathChar.begin(), libPathChar.end()};
-  auto rmLib = llvm::make_scope_exit([&] { llvm::sys::fs::remove(libPath); });
 
   std::string command = "ld -shared -o " + libPath + " " + objPath;
 
@@ -387,6 +386,8 @@ CPUBenchmarkRunner::check(std::unique_ptr<llvm::Module> harness,
 
   if (!maybeLibPath)
     return maybeLibPath.takeError();
+  auto rmLib =
+      llvm::make_scope_exit([&] { llvm::sys::fs::remove(*maybeLibPath); });
 
   std::string shmemPath =
       llvm::formatv("/llvm-mc-bench-{0}-{1}.shmem", getpid(), rand());
@@ -423,6 +424,9 @@ llvm::Error CPUBenchmarkRunner::run(std::unique_ptr<llvm::Module> harness,
 
   if (!maybeLibPath)
     return maybeLibPath.takeError();
+
+  auto rmLib =
+      llvm::make_scope_exit([&] { llvm::sys::fs::remove(*maybeLibPath); });
 
   std::string shmemPath = llvm::formatv("/llvm-mc-bench-{0}.shmem", getpid());
 

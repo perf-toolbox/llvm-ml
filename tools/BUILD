@@ -72,7 +72,10 @@ cc_binary(
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
       ":target",
-    ]
+    ],
+    visibility = [
+      "//tests:__pkg__",
+    ],
 )
 
 cc_binary(

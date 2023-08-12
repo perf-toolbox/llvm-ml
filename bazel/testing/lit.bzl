@@ -22,9 +22,10 @@ def glob_lit_tests(driver, data, test_file_exts, exclude = None, **kwargs):
         exclude = []
     test_files = native.glob(
         ["**"],
-        exclude = exclude,
+        exclude = exclude + ["**/Inputs/**/*"],
         exclude_directories = 1,
     )
+    test_data = native.glob(["**/Inputs/**/*"])
     data.append("@llvm-project//llvm:lit")
     suites = dict()
     for f in test_files:
@@ -35,7 +36,7 @@ def glob_lit_tests(driver, data, test_file_exts, exclude = None, **kwargs):
             name = test,
             srcs = ["//bazel/testing:lit_test.py"],
             main = "//bazel/testing:lit_test.py",
-            data = data + [driver, f],
+            data = data + [driver, f] + test_data,
             args = ["--package_name=%s" % native.package_name(), "--"],
             size = "small",
             **kwargs
