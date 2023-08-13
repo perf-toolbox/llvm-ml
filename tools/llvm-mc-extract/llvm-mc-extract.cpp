@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "llvm-ml/graph/Graph.hpp"
 #include "llvm-ml/target/Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
@@ -42,6 +43,7 @@
 #include <future>
 #include <indicators/indicators.hpp>
 #include <llvm/Support/Threading.h>
+#include <optional>
 
 using namespace llvm;
 namespace fs = std::filesystem;
@@ -265,6 +267,118 @@ static const llvm::Target *getTarget(const char *ProgName) {
   return target;
 }
 
+static void postprocessSingleFile(
+    const fs::path &path, std::mutex &lock,
+    std::vector<std::pair<fs::path, std::optional<llvm_ml::Graph>>> &graphs) {
+  const llvm::Target *target = getTarget("");
+  Triple triple(TripleName);
+
+  const llvm::MCTargetOptions options =
+      llvm::mc::InitMCTargetOptionsFromFlags();
+  std::unique_ptr<llvm::MCRegisterInfo> mcri(
+      target->createMCRegInfo(TripleName));
+  std::unique_ptr<llvm::MCAsmInfo> mcai(
+      target->createMCAsmInfo(*mcri, TripleName, options));
+  std::unique_ptr<llvm::MCSubtargetInfo> msti(
+      target->createMCSubtargetInfo(TripleName, "", ""));
+  std::unique_ptr<llvm::MCInstrInfo> mcii(target->createMCInstrInfo());
+
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> buffer =
+      llvm::MemoryBuffer::getFileOrSTDIN(path.c_str(), /*IsText=*/true);
+  if (std::error_code EC = buffer.getError()) {
+    // Remove all broken files
+    fs::remove(path);
+    return;
+  }
+
+  llvm::SourceMgr sourceMgr;
+
+  // Tell SrcMgr about this buffer, which is what the parser will pick
+  // up.
+  sourceMgr.AddNewSourceBuffer(std::move(*buffer), llvm::SMLoc());
+
+  llvm::MCContext context(triple, mcai.get(), mcri.get(), msti.get(),
+                          &sourceMgr);
+  std::unique_ptr<llvm::MCObjectFileInfo> mcofi(
+      target->createMCObjectFileInfo(context, /*PIC=*/false));
+  context.setObjectFileInfo(mcofi.get());
+
+  auto instructions = llvm_ml::parseAssembly(
+      sourceMgr, *mcii, *mcri, *mcai, *msti, context, target, triple, options);
+
+  if (!instructions) {
+    (void)instructions.takeError();
+    fs::remove(path);
+    return;
+  }
+
+  if (instructions->size() < 2) {
+    fs::remove(path);
+    return;
+  }
+
+  auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
+
+  bool hasCompute =
+      std::any_of(instructions->begin(), instructions->end(),
+                  [&](const llvm::MCInst &inst) {
+                    return !mlTarget->isMemLoad(inst) &&
+                           !mlTarget->isMemStore(inst) &&
+                           !mlTarget->isMov(inst) && !mlTarget->isLea(inst) &&
+                           !mlTarget->isPush(inst) && !mlTarget->isPop(inst);
+                  });
+
+  bool hasVariableLatency = std::any_of(
+      instructions->begin(), instructions->end(),
+      [&](const llvm::MCInst &inst) { return mlTarget->isVarLatency(inst); });
+
+  // This basic block is probably not doing anything useful or has a
+  // variable latency
+  if (!hasCompute || hasVariableLatency) {
+    fs::remove(path);
+    return;
+  }
+
+  std::lock_guard guard{lock};
+  // Intentionally prevent source saving, virtual roots or in-order links to
+  // save some memory.
+  graphs.emplace_back(path, llvm_ml::convertMCInstructionsToGraph(
+                                *mlTarget, *instructions, "", 0, false, false));
+}
+
+static void deduplicate(
+    std::vector<std::pair<fs::path, std::optional<llvm_ml::Graph>>> &graphs) {
+  using namespace indicators;
+
+  size_t duplicates = 0;
+
+  llvm::outs() << "Removing duplicates...\n";
+  BlockProgressBar bar{
+      option::BarWidth{80}, option::ForegroundColor{Color::green},
+      option::FontStyles{std::vector<FontStyle>{FontStyle::bold}},
+      option::MaxProgress{graphs.size()}};
+
+  for (size_t i = 0; i < graphs.size(); i++) {
+    if (!graphs[i].second.has_value()) {
+      continue;
+    }
+    for (size_t j = i + 1; j < graphs.size(); j++) {
+      if (!graphs[j].second.has_value())
+        continue;
+
+      if (*graphs[i].second == *graphs[j].second) {
+        fs::remove(graphs[j].first);
+        graphs[j].second = std::nullopt;
+        duplicates++;
+      }
+    }
+
+    bar.tick();
+  }
+
+  llvm::outs() << "Found " << duplicates << " duplicates!\n";
+}
+
 static void postprocess() {
   using namespace indicators;
   indicators::show_console_cursor(false);
@@ -314,102 +428,26 @@ static void postprocess() {
   spinner.set_option(option::PrefixText{"✔"});
   spinner.set_option(option::PostfixText{"Complete!"});
 
-  std::vector<std::shared_future<void>> dispatchedTasks;
-  dispatchedTasks.reserve(numThreads);
-
   BlockProgressBar bar{
       option::BarWidth{80}, option::ForegroundColor{Color::green},
       option::FontStyles{std::vector<FontStyle>{FontStyle::bold}},
       option::MaxProgress{files.size()}};
 
+  std::mutex parsedGraphLock;
+  std::vector<std::pair<fs::path, std::optional<llvm_ml::Graph>>> graphs;
+
   llvm::errs() << "Running in " << numThreads << " threads...\n";
   for (const auto &path : files) {
     fs::path outFile = blocks_dir / path.filename();
 
-    auto future = pool.async([path = outFile]() {
-      const llvm::Target *target = getTarget("");
-      Triple triple(TripleName);
-
-      const llvm::MCTargetOptions options =
-          llvm::mc::InitMCTargetOptionsFromFlags();
-      std::unique_ptr<llvm::MCRegisterInfo> mcri(
-          target->createMCRegInfo(TripleName));
-      std::unique_ptr<llvm::MCAsmInfo> mcai(
-          target->createMCAsmInfo(*mcri, TripleName, options));
-      std::unique_ptr<llvm::MCSubtargetInfo> msti(
-          target->createMCSubtargetInfo(TripleName, "", ""));
-      std::unique_ptr<llvm::MCInstrInfo> mcii(target->createMCInstrInfo());
-
-      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> buffer =
-          llvm::MemoryBuffer::getFileOrSTDIN(path.c_str(), /*IsText=*/true);
-      if (std::error_code EC = buffer.getError()) {
-        // Remove all broken files
-        fs::remove(path);
-        return;
-      }
-
-      llvm::SourceMgr sourceMgr;
-
-      // Tell SrcMgr about this buffer, which is what the parser will pick
-      // up.
-      sourceMgr.AddNewSourceBuffer(std::move(*buffer), llvm::SMLoc());
-
-      llvm::MCContext context(triple, mcai.get(), mcri.get(), msti.get(),
-                              &sourceMgr);
-      std::unique_ptr<llvm::MCObjectFileInfo> mcofi(
-          target->createMCObjectFileInfo(context, /*PIC=*/false));
-      context.setObjectFileInfo(mcofi.get());
-
-      auto instructions =
-          llvm_ml::parseAssembly(sourceMgr, *mcii, *mcri, *mcai, *msti, context,
-                                 target, triple, options);
-
-      if (!instructions) {
-        (void)instructions.takeError();
-        fs::remove(path);
-        return;
-      }
-
-      if (instructions->size() < 2) {
-        fs::remove(path);
-        return;
-      }
-
-      auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
-
-      bool hasCompute = std::any_of(
-          instructions->begin(), instructions->end(),
-          [&](const llvm::MCInst &inst) {
-            return !mlTarget->isMemLoad(inst) && !mlTarget->isMemStore(inst) &&
-                   !mlTarget->isMov(inst) && !mlTarget->isLea(inst) &&
-                   !mlTarget->isPush(inst) && !mlTarget->isPop(inst);
-          });
-
-      bool hasVariableLatency =
-          std::any_of(instructions->begin(), instructions->end(),
-                      [&](const llvm::MCInst &inst) {
-                        return mlTarget->isVarLatency(inst);
-                      });
-
-      // This basic block is probably not doing anything useful or has a
-      // variable latency
-      if (!hasCompute || hasVariableLatency) {
-        fs::remove(path);
-        return;
-      }
+    pool.async([path = outFile, &bar, &parsedGraphLock, &graphs]() {
+      postprocessSingleFile(path, parsedGraphLock, graphs);
+      bar.tick();
     });
-
-    dispatchedTasks.push_back(std::move(future));
-
-    if (dispatchedTasks.size() == numThreads) {
-      for (auto &future : dispatchedTasks)
-        future.wait();
-
-      dispatchedTasks.clear();
-    }
-
-    bar.tick();
   }
+
+  deduplicate(graphs);
+
   indicators::show_console_cursor(true);
 }
 

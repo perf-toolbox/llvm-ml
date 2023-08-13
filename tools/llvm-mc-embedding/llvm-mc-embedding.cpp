@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "llvm-ml/graph/Graph.hpp"
 #include "llvm-ml/structures/structures.hpp"
 #include "llvm-ml/target/Target.hpp"
 
@@ -58,48 +59,7 @@ static void signalHandler(void *) { clearTerminalColors(); }
 
 static void interruptHandler() { clearTerminalColors(); }
 
-struct NodeFeatures {
-  uint32_t opcode = 0; ///< Opcode of the instruction
-  bool isLoad = false; ///< true if the instruction performs global memory load
-  bool isStore =
-      false; ///< true if the instruction performs global memory store
-  bool isBarrier = false; ///< true if the instruction emits execution barrier
-  bool isAtomic = false;  ///< true if instruction is an atomic instruction
-  bool isVector = false;  ///< true if the instruction is a vector instruction
-  bool isCompute =
-      false; ///< true if the instruction performs any kind of computation
-             /// except for memory move
-  bool isFloat =
-      false; ///< true if the instruction performs floating point computation
-  bool isVirtualRoot = false;
-  size_t nodeId = 0;
-};
-
-struct EdgeFeatures {
-  bool isData = false;
-};
-
-struct Graph {
-  size_t numOpcodes;
-  bool hasVirtualRoot;
-  std::string source;
-
-  void addNode(const NodeFeatures &features) { mNodes.push_back(features); }
-
-  void addEdge(size_t from, size_t to, const EdgeFeatures &features) {
-    mEdges.emplace_back(from, to, features);
-  }
-
-  const std::vector<NodeFeatures> &getNodes() const { return mNodes; }
-
-  const auto &getEdges() const { return mEdges; }
-
-private:
-  std::vector<NodeFeatures> mNodes;
-  std::vector<std::tuple<size_t, size_t, EdgeFeatures>> mEdges;
-};
-
-static json getMetaFeatures(const NodeFeatures &n) {
+static json getMetaFeatures(const llvm_ml::NodeFeatures &n) {
   json node;
   node["is_load"] = n.isLoad;
   node["is_store"] = n.isStore;
@@ -112,13 +72,13 @@ static json getMetaFeatures(const NodeFeatures &n) {
   return node;
 }
 
-static void storeGraphIntoJSON(json &out, const Graph &g) {
+static void storeGraphIntoJSON(json &out, const llvm_ml::Graph &g) {
   out["source"] = g.source;
-  out["num_opcodes"] = g.numOpcodes;
+  out["max_opcodes"] = g.maxOpcodes;
   out["has_virtual_root"] = g.hasVirtualRoot;
 }
 
-static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
+static void exportReadableJSON(const llvm_ml::Graph &g, llvm::raw_ostream &os) {
   auto nodes = json::array();
 
   for (auto n : g.getNodes()) {
@@ -142,12 +102,11 @@ static void exportReadableJSON(const Graph &g, llvm::raw_ostream &os) {
   os << out.dump(4);
 }
 
-static void exportBinary(const Graph &g, const std::map<unsigned, size_t> &map,
-                         std::filesystem::path path) {
+static void exportBinary(const llvm_ml::Graph &g, std::filesystem::path path) {
   capnp::MallocMessageBuilder message;
   llvm_ml::MCGraph::Builder graph = message.initRoot<llvm_ml::MCGraph>();
   graph.setSource(g.source);
-  graph.setMaxOpcode(g.numOpcodes);
+  graph.setMaxOpcode(g.maxOpcodes);
   graph.setHasVirtualRoot(g.hasVirtualRoot);
 
   capnp::List<llvm_ml::MCNode>::Builder nodes =
@@ -172,7 +131,8 @@ static void exportBinary(const Graph &g, const std::map<unsigned, size_t> &map,
     llvm_ml::MCEdge::Builder bEdge = edges[e.index()];
     bEdge.setFrom(std::get<0>(e.value()));
     bEdge.setTo(std::get<1>(e.value()));
-    bEdge.setIsDataDependency(std::get<EdgeFeatures>(e.value()).isData);
+    bEdge.setIsDataDependency(
+        std::get<llvm_ml::EdgeFeatures>(e.value()).isData);
   }
 
   llvm_ml::writeToFile(path, message);
@@ -228,24 +188,6 @@ static const llvm::Target *getTarget(const char *ProgName) {
   return target;
 }
 
-static std::map<unsigned, size_t> getOpcodeMap(llvm::MCInstrInfo &mcii) {
-  size_t opcodeId = 0;
-  std::map<unsigned, size_t> map;
-
-  for (unsigned opcode = 0; opcode < mcii.getNumOpcodes(); opcode++) {
-    const llvm::MCInstrDesc &desc = mcii.get(opcode);
-
-    if (desc.isPseudo()) {
-      continue;
-    }
-
-    map[opcode] = opcodeId;
-    opcodeId++;
-  }
-
-  return map;
-}
-
 static llvm::Error processSingleInput(fs::path input, fs::path output,
                                       llvm::Triple triple) {
   // FIXME(Alex): this is potentially not thread safe
@@ -287,67 +229,12 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
 
   auto mlTarget = llvm_ml::createMLTarget(triple, mcii.get());
 
-  auto map = getOpcodeMap(*mcii);
-
   std::string source =
       sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer().str();
-  Graph graph;
-  graph.source = std::move(source);
-  graph.hasVirtualRoot = VirtualRoot;
-  graph.numOpcodes = map.size();
 
-  if (VirtualRoot) {
-    NodeFeatures features;
-    features.isVirtualRoot = true;
-    features.opcode = 0;
-    features.nodeId = 0;
-
-    graph.addNode(features);
-  }
-
-  for (size_t i = 0; i < instructions->size(); i++) {
-    // Extract the opcode of the instruction and add it as a node feature
-    NodeFeatures features;
-    features.opcode = (*instructions)[i].getOpcode();
-    features.isLoad = mlTarget->isMemLoad((*instructions)[i]);
-    features.isStore = mlTarget->isMemStore((*instructions)[i]);
-    features.isBarrier = mlTarget->isBarrier((*instructions)[i]);
-    features.isVector = mlTarget->isVector((*instructions)[i]);
-    features.isCompute = mlTarget->isCompute((*instructions)[i]);
-
-    size_t idx = i + static_cast<size_t>(VirtualRoot == true);
-
-    features.nodeId = idx;
-
-    graph.addNode(features);
-    EdgeFeatures ef;
-    if ((i > 0) && InOrder) {
-      graph.addEdge(idx - 1, idx, ef);
-    }
-    if (VirtualRoot) {
-      graph.addEdge(0, idx, ef);
-    }
-  }
-
-  std::unordered_map<unsigned, size_t> lastWrite;
-
-  for (size_t i = 0; i < instructions->size(); i++) {
-    auto readRegs = mlTarget->getReadRegisters((*instructions)[i]);
-    auto writeRegs = mlTarget->getReadRegisters((*instructions)[i]);
-
-    for (unsigned reg : readRegs) {
-      if (lastWrite.count(reg)) {
-        size_t offset = static_cast<size_t>(VirtualRoot == true);
-        EdgeFeatures ef;
-        ef.isData = true;
-        graph.addEdge(lastWrite.at(reg) + offset, i + offset, ef);
-      }
-    }
-
-    for (unsigned reg : writeRegs) {
-      lastWrite[reg] = i;
-    }
-  }
+  llvm_ml::Graph graph = llvm_ml::convertMCInstructionsToGraph(
+      *mlTarget, *instructions, source, mcii->getNumOpcodes(), VirtualRoot,
+      InOrder);
 
   if (ReadableJSON) {
     std::error_code ec;
@@ -357,7 +244,7 @@ static llvm::Error processSingleInput(fs::path input, fs::path output,
     exportReadableJSON(graph, ofs);
     ofs.close();
   } else {
-    exportBinary(graph, map, output);
+    exportBinary(graph, output);
   }
 
   return llvm::Error::success();
