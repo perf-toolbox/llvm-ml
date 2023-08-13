@@ -3,12 +3,13 @@ from llvm_ml.utils import load_dataset
 def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
     from torch_geometric.data import Data, Dataset
     import torch
+    import numpy as np
 
 
     class BasicBlockDataset(Dataset):
         def __init__(self, dataset_path, use_binary_opcode=True, prefilter=True):
             super().__init__(None, None, None)
-            basic_blocks = load_dataset(dataset_path, undirected=True, include_metrics=False)
+            basic_blocks = load_dataset(dataset_path, True, False)
 
             self.data = []
             self.basic_blocks = []
@@ -18,7 +19,25 @@ def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
                     if bb.measured_cycles > 500 or bb.measured_cycles <= 0:
                         continue
 
-                self.data.append(Data(x=torch.from_numpy(bb.nodes), edge_index=torch.from_numpy(bb.edges).contiguous(), y=torch.tensor(bb.cycles)))
+                if use_binary_opcode:
+                    nodes = np.zeros((len(bb.nodes), 32))
+                else:
+                    nodes = np.zeros(len(bb.nodes), dtype=np.int_)
+
+                for idx, n in enumerate(bb.nodes):
+                    if use_binary_opcode:
+                        for j in range(32):
+                            nodes[idx, j] = n.binary_opcode[j]
+                    else:
+                        nodes[idx] = n.opcode
+
+                edges = np.zeros((len(bb.edges), 2), dtype=np.int_)
+
+                for idx, e in enumerate(bb.edges):
+                    edges[idx, 0] = e.from_node
+                    edges[idx, 1] = e.to_node
+
+                self.data.append(Data(x=torch.from_numpy(nodes), edge_index=torch.from_numpy(np.transpose(edges)).contiguous(), y=torch.tensor(bb.measured_cycles)))
                 self.basic_blocks.append({
                     'source': bb.source,
                 })

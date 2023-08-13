@@ -25,21 +25,21 @@ def convert_graph(basic_block):
     source = basic_block.source.split("\n")
     node_colors = []
     node_id = 0
-    for n in basic_block.node_properties:
+    for n in basic_block.nodes:
         color_weights = [0.] * 7
-        if n['is_load']:
+        if n.is_load:
             color_weights[0] = 1.
-        if n['is_store']:
+        if n.is_store:
             color_weights[1] = 1.
-        if n['is_barrier']:
+        if n.is_barrier:
             color_weights[2] = 1.
-        if n['is_atomic']:
+        if n.is_atomic:
             color_weights[3] = 1.
-        if n['is_vector']:
+        if n.is_vector:
             color_weights[4] = 1.
-        if n['is_compute'] and not n['is_float']:
+        if n.is_compute and not n.is_float:
             color_weights[5] = 1.
-        if n['is_float']:
+        if n.is_float:
             color_weights[6] = 1.
         color_weights = np.array(color_weights)
         if np.sum(color_weights) != 0:
@@ -47,15 +47,15 @@ def convert_graph(basic_block):
         blended_color = blend_colors(colors, color_weights)
         node_colors.append(blended_color)
 
-        level = 0 if n['is_virtual'] else 1
+        level = 0 if n.is_virtual_root else 1
         graph.add_node(node_id, level=level)
         if node_id > 0 and basic_block.has_virtual_root:
             graph.nodes[node_id]['instruction'] = source[node_id - 1].strip().replace("\t", "    ")
         elif not basic_block.has_virtual_root:
             graph.nodes[node_id]['instruction'] = source[node_id].strip().replace("\t", "    ")
         node_id += 1
-    for e in np.transpose(basic_block.edges):
-        graph.add_edge(e[0], e[1])
+    for e in basic_block.edges:
+        graph.add_edge(e.from_node, e.to_node)
 
     return graph, node_colors
 
@@ -138,8 +138,8 @@ assert (os.path.exists(args.filename))
 assert (os.path.exists(args.output))
 assert (os.path.isdir(args.output))
 
-basic_blocks = llvm_ml.utils.load_data(args.filename, show_progress=True)
-basic_blocks = sorted(basic_blocks, key = lambda bb: bb.cycles)
+basic_blocks = llvm_ml.utils.load_dataset(args.filename)
+basic_blocks = sorted(basic_blocks, key = lambda bb: bb.measured_cycles)
 
 markdown = open(os.path.join(args.output, "report.md"), 'w')
 markdown.write(f"# Report for {args.filename}\n\n")
@@ -147,24 +147,24 @@ markdown.write(f"## Basic info\n\n")
 markdown.write(f"Total samples: {len(basic_blocks)}\n")
 
 markdown.write("\n## Cycles distribution\n\n")
-cycles = np.array([bb.cycles for bb in basic_blocks])
+cycles = np.array([bb.measured_cycles for bb in basic_blocks])
 plot_distribution(os.path.join(args.output, 'cycles_distribution.png'), markdown, cycles)
-markdown.write("Zoomed up to 50 cycles\n\n")
-cycles_zoom = np.where(cycles <= 50)
+markdown.write("Zoomed up to 20 cycles\n\n")
+cycles_zoom = np.where(cycles <= 20)
 plot_distribution(os.path.join(args.output, 'cycles_distribution_zoom.png'), markdown, cycles[cycles_zoom])
 
 markdown.write(f"## 5 random samples\n\n")
 for i in range(5):
     bb = random.choice(basic_blocks)
     markdown.write(f"### Sample {i + 1}\n\n")
-    markdown.write(f"Cycles: {bb.cycles}\n")
+    markdown.write(f"Cycles: {bb.measured_cycles}\n")
     print_sample(i + 1, bb, args.output, markdown)
 
 markdown.write(f"## 10 longest samples\n\n")
 num_longest = 1
 for bb in basic_blocks[-10:]:
     markdown.write(f"### Sample {num_longest}\n\n")
-    markdown.write(f"Cycles: {bb.cycles}\n")
+    markdown.write(f"Cycles: {bb.measured_cycles}\n")
     print_sample(f"longest_{num_longest}", bb, args.output, markdown)
     num_longest += 1
 

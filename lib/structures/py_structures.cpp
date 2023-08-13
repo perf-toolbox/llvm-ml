@@ -1,6 +1,9 @@
 #include "llvm-ml/structures/structures.hpp"
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <array>
 #include <cstddef>
@@ -51,6 +54,7 @@ struct PyBasicBlock {
   float measuredCycles;
   std::uint16_t numRepeat;
   std::string source;
+  bool hasVirtualRoot;
 };
 
 std::vector<PyBasicBlock> loadDataset(const std::string &path, bool undirected,
@@ -69,6 +73,7 @@ std::vector<PyBasicBlock> loadDataset(const std::string &path, bool undirected,
           (float)metrics.getMeasuredCycles() / metrics.getNumRepeat();
       bb.numRepeat = metrics.getNumRepeat();
       bb.source = graph.getSource();
+      bb.hasVirtualRoot = graph.getHasVirtualRoot();
 
       bb.nodes.reserve(graph.getNodes().size());
       bb.edges.reserve(graph.getEdges().size());
@@ -138,7 +143,8 @@ std::vector<PyBasicBlock> loadDataset(const std::string &path, bool undirected,
       result.push_back(bb);
     }
   };
-  if (!llvm_ml::readFromFile<llvm_ml::MCDataset>(fs::path(path), reader))
+  int err = llvm_ml::readFromFile<llvm_ml::MCDataset>(fs::path(path), reader);
+  if (err != 0)
     abort();
 
   return result;
@@ -160,8 +166,8 @@ NB_MODULE(_llvm_ml_impl, m) {
       .def_rw("is_virtual_root", &PyNode::isVirtualRoot);
   nb::class_<PyEdge>(m, "MCEdge")
       .def(nb::init<>())
-      .def_rw("from", &PyEdge::from)
-      .def_rw("to", &PyEdge::to)
+      .def_rw("from_node", &PyEdge::from)
+      .def_rw("to_node", &PyEdge::to)
       .def_rw("is_data", &PyEdge::isDataDependency);
   nb::class_<PyMetrics>(m, "MCMetrics")
       .def(nb::init<>())
@@ -180,6 +186,7 @@ NB_MODULE(_llvm_ml_impl, m) {
       .def_rw("workload_metrics", &PyBasicBlock::workloadMetrics)
       .def_rw("measured_cycles", &PyBasicBlock::measuredCycles)
       .def_rw("num_repeat", &PyBasicBlock::numRepeat)
+      .def_rw("has_virtual_root", &PyBasicBlock::hasVirtualRoot)
       .def_rw("source", &PyBasicBlock::source);
 
   m.def("load_dataset", &loadDataset, "path"_a, "undirected"_a = false,
