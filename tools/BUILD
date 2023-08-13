@@ -4,7 +4,7 @@ load("//bazel:packaging_utils.bzl", "shared_object_path_selector")
 cc_library(
     name = "target",
     srcs = [
-       "target/Target.cpp",
+        "target/Target.cpp",
         "target/X86Target.cpp",
     ],
     hdrs = [
@@ -63,6 +63,24 @@ cc_library(
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
 )
 
+cc_library(
+    name = "graph",
+    hdrs = [
+        "graph/Graph.hpp",
+    ],
+    srcs = [
+        "graph/Graph.cpp",
+    ],
+    include_prefix = "llvm-ml",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:Target",
+        ":target",
+    ],
+)
+
 cc_binary(
     name = "llvm-mc-bench",
     srcs = [
@@ -90,6 +108,7 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       ":target",
+      ":graph",
       "@//third_party:indicators",
     ]
 )
@@ -106,6 +125,7 @@ cc_binary(
       "@llvm-project//llvm:Target",
       "@nlohmann_json//:json",
       ":target",
+      ":graph",
       "@llvm-ml-libs//:cpp_structures",
       "@//third_party:indicators",
     ]
