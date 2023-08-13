@@ -347,7 +347,7 @@ static void postprocessSingleFile(
 }
 
 static void deduplicate(
-    std::span<std::pair<fs::path, std::optional<llvm_ml::Graph>>> graphs) {
+    std::vector<std::pair<fs::path, std::optional<llvm_ml::Graph>>> &graphs) {
   using namespace indicators;
 
   size_t duplicates = 0;
