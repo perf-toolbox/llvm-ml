@@ -299,7 +299,14 @@ public:
            (opcode >= llvm::X86::VRSQRT14PDZ128m &&
             opcode <= llvm::X86::VRSQRTSSr_Int) ||
            (opcode >= llvm::X86::VSQRTPDYm &&
-            opcode <= llvm::X86::VSQRTSSr_Int);
+            opcode <= llvm::X86::VSQRTSSr_Int) ||
+           (opcode >= llvm::X86::REPNE_PREFIX &&
+            opcode <= llvm::X86::REP_STOSW_64) ||
+           opcode == llvm::X86::FPREM || opcode == llvm::X86::FPREM1 ||
+           opcode == llvm::X86::FSIN || opcode == llvm::X86::FCOS ||
+           opcode == llvm::X86::FPATAN || opcode == llvm::X86::FPTAN ||
+           opcode == llvm::X86::FSINCOS || opcode == llvm::X86::F2XM1 ||
+           opcode == llvm::X86::F2XM1;
   }
 
   std::unique_ptr<llvm_ml::InlineAsmBuilder> createInlineAsmBuilder() override {
