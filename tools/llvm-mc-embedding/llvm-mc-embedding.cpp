@@ -456,7 +456,7 @@ int main(int argc, char **argv) {
       if (ReadableJSON) {
         outFile.replace_extension("json");
       } else {
-        outFile.replace_extension("pb");
+        outFile.replace_extension("cbuf");
       }
 
       auto future = pool.async(&processSingleInput, std::move(path),
