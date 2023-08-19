@@ -35,7 +35,7 @@ int llvm_ml::readFromFile(fs::path path,
   }
   kj::AutoCloseFd autoFd(fd);
 
-  capnp::ReaderOptions opts{.traversalLimitInWords = 128 * 1024 * 1024,
+  capnp::ReaderOptions opts{.traversalLimitInWords = 512 * 1024 * 1024,
                             .nestingLimit = 128};
 
   capnp::PackedFdMessageReader message(std::move(autoFd), opts);
