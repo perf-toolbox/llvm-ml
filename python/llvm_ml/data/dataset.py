@@ -18,6 +18,12 @@ def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
                 if prefilter:
                     if bb.measured_cycles > 500 or bb.measured_cycles <= 0:
                         continue
+                    if "rep" in bb.source:
+                        continue
+                    if "cpuid" in bb.source:
+                        continue
+                    if "prefetch" in bb.source:
+                        continue
 
                 if use_binary_opcode:
                     nodes = np.zeros((len(bb.nodes), 32))
