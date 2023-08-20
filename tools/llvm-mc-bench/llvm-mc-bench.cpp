@@ -47,6 +47,9 @@
 #include <filesystem>
 #include <indicators/indicators.hpp>
 #include <iostream>
+#include <llvm/Support/Error.h>
+#include <range/v3/algorithm/min_element.hpp>
+#include <range/v3/view/filter.hpp>
 
 namespace fs = std::filesystem;
 using namespace llvm;
@@ -71,9 +74,25 @@ static cl::opt<int> NumRepeatNoise(
     cl::desc("number of basic block repititions for noise measurement"),
     cl::init(10), cl::cat(ToolOptions));
 
+static cl::opt<int> NumMaxRuns(
+    "r", cl::desc("maximum number of test harness re-runs in case of failure"),
+    cl::init(50), cl::cat(ToolOptions));
+
 static cl::opt<int>
-    NumMaxRuns("r", cl::desc("maximum number of test harness re-runs"),
-               cl::init(50), cl::cat(ToolOptions));
+    MaxCacheMisses("max-cache-misses",
+                   cl::desc("maximum number of L1 cache misses in the samples"),
+                   cl::init(0), cl::cat(ToolOptions));
+
+static cl::opt<int> MaxContextSwitches(
+    "max-context-switches",
+    cl::desc("maximum number of context switches in the samples"), cl::init(0),
+    cl::cat(ToolOptions));
+
+static cl::opt<int> MaxNumRepeat(
+    "max-num-repeat",
+    cl::desc("maximum number of basic block repititions for benchmark run, "
+             "only makes sense when --num-repeat=0"),
+    cl::init(120), cl::cat(ToolOptions));
 
 static cl::list<int>
     PinnedCPUs("c", cl::desc("IDs of the CPU cores to pin this process to"),
@@ -173,7 +192,7 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
     if (!suggested)
       return suggested.takeError();
 
-    numRepeat = std::max(*suggested, 200);
+    numRepeat = std::min(*suggested, static_cast<int>(MaxNumRepeat));
   }
 
   auto module = llvm_ml::createCPUTestHarness(
@@ -197,10 +216,28 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
     return lhs.numCycles < rhs.numCycles;
   };
 
-  auto minNoise =
-      std::min_element(noiseResults.begin(), noiseResults.end(), minEltPred);
-  auto minWorkload = std::min_element(workloadResults.begin(),
-                                      workloadResults.end(), minEltPred);
+  const auto filter = [](const llvm_ml::BenchmarkResult &res) {
+    return res.numCacheMisses <= MaxCacheMisses &&
+           res.numContextSwitches <= MaxContextSwitches;
+  };
+
+  auto filteredNoise = noiseResults | ranges::views::filter(filter);
+  auto filteredWorkload = workloadResults | ranges::views::filter(filter);
+
+  if (ranges::empty(filteredNoise))
+    return llvm::createStringError(
+        std::errc::invalid_argument,
+        "Neither of noise samples is suitable for use");
+  if (ranges::empty(filteredWorkload))
+    return llvm::createStringError(
+        std::errc::invalid_argument,
+        "Neither of workload samples is suitable for use");
+
+  auto minNoise = ranges::min_element(filteredNoise, minEltPred);
+  auto minWorkload = ranges::min_element(filteredWorkload, minEltPred);
+
+  assert(minNoise != filteredNoise.end());
+  assert(minWorkload != filteredWorkload.end());
 
   llvm_ml::Measurement m = *minWorkload - *minNoise;
 
