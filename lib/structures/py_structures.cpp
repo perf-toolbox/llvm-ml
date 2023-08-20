@@ -54,6 +54,7 @@ struct PyBasicBlock {
   float measuredCycles;
   std::uint16_t numRepeat;
   std::string source;
+  std::string id;
   bool hasVirtualRoot;
 };
 
@@ -73,6 +74,7 @@ std::vector<PyBasicBlock> loadDataset(const std::string &path, bool undirected,
           (float)metrics.getMeasuredCycles() / metrics.getNumRepeat();
       bb.numRepeat = metrics.getNumRepeat();
       bb.source = graph.getSource();
+      bb.id = piece.getId();
       bb.hasVirtualRoot = graph.getHasVirtualRoot();
 
       bb.nodes.reserve(graph.getNodes().size());
@@ -187,6 +189,7 @@ NB_MODULE(_llvm_ml_impl, m) {
       .def_rw("measured_cycles", &PyBasicBlock::measuredCycles)
       .def_rw("num_repeat", &PyBasicBlock::numRepeat)
       .def_rw("has_virtual_root", &PyBasicBlock::hasVirtualRoot)
+      .def_rw("id", &PyBasicBlock::id)
       .def_rw("source", &PyBasicBlock::source);
 
   m.def("load_dataset", &loadDataset, "path"_a, "undirected"_a = false,

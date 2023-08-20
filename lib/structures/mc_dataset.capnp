@@ -9,6 +9,7 @@ using Graph = import "mc_graph.capnp";
 struct MCDataPiece {
   metrics @0 : Metrics.MCMetrics;
   graph @1 : Graph.MCGraph;
+  id @2 : Text;
 }
 
 struct MCDataset {
