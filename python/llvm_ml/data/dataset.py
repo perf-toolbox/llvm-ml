@@ -1,13 +1,13 @@
 from llvm_ml.utils import load_dataset, floor_step
 
-def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilter=True):
+def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilter=True, banned_ids=[]):
     from torch_geometric.data import Data, Dataset
     import torch
     import numpy as np
 
 
     class BasicBlockDataset(Dataset):
-        def __init__(self, dataset_path, use_binary_opcode=True, prefilter=True):
+        def __init__(self, dataset_path, use_binary_opcode=True, prefilter=True, banned_ids=[]):
             super().__init__(None, None, None)
             basic_blocks = load_dataset(dataset_path, True, False)
 
@@ -16,7 +16,7 @@ def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilte
 
             for bb in basic_blocks:
                 if prefilter:
-                    if bb.measured_cycles > 80 or bb.measured_cycles <= 0:
+                    if bb.measured_cycles > 35 or bb.measured_cycles <= 0:
                         continue
                     if "rep" in bb.source:
                         continue
@@ -24,6 +24,9 @@ def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilte
                         continue
                     if "prefetch" in bb.source:
                         continue
+
+                if bb.id in banned_ids:
+                    continue
 
                 if use_binary_opcode:
                     nodes = np.zeros((len(bb.nodes), 32))
@@ -65,4 +68,4 @@ def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilte
 
             return x, y
 
-    return BasicBlockDataset(dataset_path, use_binary_opcode, prefilter)
+    return BasicBlockDataset(dataset_path, use_binary_opcode, prefilter, banned_ids)
