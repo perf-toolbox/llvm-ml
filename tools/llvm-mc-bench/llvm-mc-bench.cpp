@@ -249,11 +249,11 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
 
   if (failedNoiseRate > maxFailed)
     return llvm::createStringError(std::errc::invalid_argument,
-                                   "Too many failed noise samples: {} of {}",
+                                   "Too many failed noise samples: %d of %d",
                                    failedNoise, noiseResults.size());
   if (failedWorkloadRate > maxFailed)
     return llvm::createStringError(std::errc::invalid_argument,
-                                   "Too many failed workload samples: {} of {}",
+                                   "Too many failed workload samples: %d of %d",
                                    failedWorkload, workloadResults.size());
 
   auto minNoise = ranges::min_element(filteredNoise, minEltPred);
