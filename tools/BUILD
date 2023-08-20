@@ -59,6 +59,7 @@ cc_library(
       "@llvm-ml-libs//:cpp_structures",
       "//third_party:libpmu",
       "@//third_party:indicators",
+      "@range-v3",
     ],
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
 )
