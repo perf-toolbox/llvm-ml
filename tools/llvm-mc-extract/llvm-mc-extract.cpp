@@ -448,6 +448,8 @@ static void postprocess() {
     });
   }
 
+  pool.wait();
+
   deduplicate(graphs);
 
   indicators::show_console_cursor(true);
