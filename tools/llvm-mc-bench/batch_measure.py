@@ -6,7 +6,7 @@ import psutil
 
 def create_task(basic_block, out_dir, cpu_num, retry, num_runs):
     out_name = os.path.basename(basic_block)
-    out_path = os.path.join(out_dir, out_name + ".pb")
+    out_path = os.path.join(out_dir, out_name + ".cbuf")
     handle = subprocess.Popen(["./bazel-bin/tools/llvm-mc-bench", basic_block, "-o", out_path, "-c", str(cpu_num)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     task = {}
     task["proc"] = handle
