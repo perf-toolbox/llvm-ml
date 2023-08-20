@@ -101,8 +101,8 @@ int main(int argc, char **argv) {
   capnp::MallocMessageBuilder message;
   llvm_ml::MCDataset::Builder dataset = message.initRoot<llvm_ml::MCDataset>();
 
-  std::vector<std::pair<kj::Own<llvm_ml::MCGraph::Reader>,
-                        kj::Own<llvm_ml::MCMetrics::Reader>>>
+  std::vector<std::tuple<std::string, kj::Own<llvm_ml::MCGraph::Reader>,
+                         kj::Own<llvm_ml::MCMetrics::Reader>>>
       measuredPairs;
 
   {
@@ -117,8 +117,8 @@ int main(int argc, char **argv) {
       if (!graphs.count(m.first))
         continue;
 
-      measuredPairs.push_back(std::make_pair(capnp::clone(*graphs.at(m.first)),
-                                             capnp::clone(*m.second)));
+      measuredPairs.push_back(std::make_tuple(
+          m.first, capnp::clone(*graphs.at(m.first)), capnp::clone(*m.second)));
     }
   }
 
@@ -126,8 +126,9 @@ int main(int argc, char **argv) {
       dataset.initData(measuredPairs.size());
   for (size_t i = 0; i < measuredPairs.size(); i++) {
     llvm_ml::MCDataPiece::Builder piece = pieces[i];
-    piece.setGraph(*measuredPairs[i].first);
-    piece.setMetrics(*measuredPairs[i].second);
+    piece.setGraph(*std::get<1>(measuredPairs[i]));
+    piece.setMetrics(*std::get<2>(measuredPairs[i]));
+    piece.setId(std::get<0>(measuredPairs[i]));
   }
 
   llvm_ml::writeToFile(std::string(OutFile), message);
