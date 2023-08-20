@@ -240,18 +240,21 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
         "Neither of workload samples is suitable for use");
 
   float maxFailed = static_cast<float>(MaxFailed) / 100.f;
-  float failedNoise =
-      static_cast<float>(ranges::distance(filteredNoise)) / noiseResults.size();
-  float failedWorkload =
-      static_cast<float>(ranges::distance(filteredWorkload)) /
-      workloadResults.size();
+  size_t failedNoise = noiseResults.size() - ranges::distance(filteredNoise);
+  size_t failedWorkload =
+      workloadResults.size() - ranges::distance(filteredWorkload);
+  float failedNoiseRate = static_cast<float>(failedNoise) / noiseResults.size();
+  float failedWorkloadRate =
+      static_cast<float>(failedWorkload) / workloadResults.size();
 
-  if (failedNoise > maxFailed)
+  if (failedNoiseRate > maxFailed)
     return llvm::createStringError(std::errc::invalid_argument,
-                                   "Too many failed noise samples");
-  if (failedWorkload > maxFailed)
+                                   "Too many failed noise samples: {} of {}",
+                                   failedNoise, noiseResults.size());
+  if (failedWorkloadRate > maxFailed)
     return llvm::createStringError(std::errc::invalid_argument,
-                                   "Too many failed workload samples");
+                                   "Too many failed workload samples: {} of {}",
+                                   failedWorkload, workloadResults.size());
 
   auto minNoise = ranges::min_element(filteredNoise, minEltPred);
   auto minWorkload = ranges::min_element(filteredWorkload, minEltPred);
