@@ -65,7 +65,10 @@ for bbf in inputs:
             except subprocess.TimeoutExpired:
                 parent = psutil.Process(t["proc"].pid)
                 for child in parent.children(recursive=True):
-                    child.kill()
+                    try:
+                        child.kill()
+                    except:
+                        pass
                 parent.kill()
                 continue
             if t["proc"].returncode != 0 and t["retries"] + 1 < args.retries:
