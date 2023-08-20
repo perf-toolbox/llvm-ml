@@ -49,6 +49,7 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <range/v3/algorithm/min_element.hpp>
+#include <range/v3/iterator/operations.hpp>
 #include <range/v3/view/filter.hpp>
 
 namespace fs = std::filesystem;
@@ -87,6 +88,11 @@ static cl::opt<int> MaxContextSwitches(
     "max-context-switches",
     cl::desc("maximum number of context switches in the samples"), cl::init(0),
     cl::cat(ToolOptions));
+
+static cl::opt<int> MaxFailed(
+    "max-failed",
+    cl::desc("maximum percent of failed samples, integer in range 1 to 99"),
+    cl::init(10), cl::cat(ToolOptions));
 
 static cl::opt<int> MaxNumRepeat(
     "max-num-repeat",
@@ -232,6 +238,20 @@ llvm::Error runSingleFile(fs::path input, fs::path output,
     return llvm::createStringError(
         std::errc::invalid_argument,
         "Neither of workload samples is suitable for use");
+
+  float maxFailed = static_cast<float>(MaxFailed) / 100.f;
+  float failedNoise =
+      static_cast<float>(ranges::distance(filteredNoise)) / noiseResults.size();
+  float failedWorkload =
+      static_cast<float>(ranges::distance(filteredWorkload)) /
+      workloadResults.size();
+
+  if (failedNoise > maxFailed)
+    return llvm::createStringError(std::errc::invalid_argument,
+                                   "Too many failed noise samples");
+  if (failedWorkload > maxFailed)
+    return llvm::createStringError(std::errc::invalid_argument,
+                                   "Too many failed workload samples");
 
   auto minNoise = ranges::min_element(filteredNoise, minEltPred);
   auto minWorkload = ranges::min_element(filteredWorkload, minEltPred);
