@@ -1,6 +1,6 @@
-from llvm_ml.utils import load_dataset
+from llvm_ml.utils import load_dataset, floor_step
 
-def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
+def load_pyg_dataset(dataset_path, step="0.05", use_binary_opcode=True, prefilter=True):
     from torch_geometric.data import Data, Dataset
     import torch
     import numpy as np
@@ -16,7 +16,7 @@ def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
 
             for bb in basic_blocks:
                 if prefilter:
-                    if bb.measured_cycles > 500 or bb.measured_cycles <= 0:
+                    if bb.measured_cycles > 80 or bb.measured_cycles <= 0:
                         continue
                     if "rep" in bb.source:
                         continue
@@ -43,7 +43,12 @@ def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
                     edges[idx, 0] = e.from_node
                     edges[idx, 1] = e.to_node
 
-                self.data.append(Data(x=torch.from_numpy(nodes), edge_index=torch.from_numpy(np.transpose(edges)).contiguous(), y=torch.tensor(bb.measured_cycles)))
+                y = bb.measured_cycles
+
+                if step is not None:
+                    y = floor_step(y, step)
+
+                self.data.append(Data(x=torch.from_numpy(nodes), edge_index=torch.from_numpy(np.transpose(edges)).contiguous(), y=torch.tensor(y)))
                 self.basic_blocks.append({
                     'source': bb.source,
                 })
