@@ -374,6 +374,7 @@ llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
       results.push_back(res[j]);
       results.back().numRuns = numRepeat;
     }
+    break;
   }
 
   return llvm::Error::success();
