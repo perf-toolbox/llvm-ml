@@ -9,6 +9,7 @@
 #include "llvm/Support/InitLLVM.h"
 
 #include <capnp/message.h>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -24,6 +25,37 @@ static cl::opt<std::string> MetricsDirectory(cl::Positional,
                                              cl::desc("<metrics dir>"));
 
 static cl::opt<std::string> OutFile("o", cl::desc("out file"), cl::Required);
+
+static cl::opt<unsigned>
+    MaxCoV("max-cov",
+           cl::desc("maximum allowed coefficient of variation, integer value "
+                    "in the range 1 to 100"),
+           cl::init(10));
+
+static double average(const llvm_ml::MCMetrics::Reader &reader) {
+  double sum = 0.0;
+  for (const auto &sample : reader.getWorkloadSamples()) {
+    sum += sample.getCycles();
+  }
+
+  return sum / reader.getWorkloadSamples().size();
+}
+
+static double standardDeviation(const llvm_ml::MCMetrics::Reader &reader,
+                                double mean) {
+  const auto square_diff = [](uint64_t a, double b) -> double {
+    double diff = static_cast<double>(a) - b;
+    return diff * diff;
+  };
+
+  double sum = 0.0;
+
+  for (const auto &sample : reader.getWorkloadSamples()) {
+    sum += square_diff(sample.getCycles(), mean);
+  }
+
+  return std::sqrt(sum / reader.getWorkloadSamples().size());
+}
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
@@ -47,6 +79,12 @@ int main(int argc, char **argv) {
   }
   if (!fs::is_directory(metricsDir)) {
     llvm::errs() << "Metrics path is not a directory\n";
+    return 1;
+  }
+
+  if (MaxCoV < 1 || MaxCoV > 100) {
+    llvm::errs() << "maximum CoV must be in range [1; 100], got " << MaxCoV
+                 << "\n";
     return 1;
   }
 
@@ -111,11 +149,23 @@ int main(int argc, char **argv) {
 
     measuredPairs.reserve(metrics.size());
 
+    const double maxCoV = static_cast<double>(MaxCoV) / 100.0;
+
     for (auto &m : metrics) {
       if (m.second->getMeasuredCycles() == 0)
         continue;
       if (!graphs.count(m.first))
         continue;
+
+      if (MaxCoV != 100) {
+        double mean = average(*m.second);
+        double sigma = standardDeviation(*m.second, mean);
+
+        double cov = mean / sigma;
+
+        if (cov > maxCoV)
+          continue;
+      }
 
       measuredPairs.push_back(std::make_tuple(
           m.first, capnp::clone(*graphs.at(m.first)), capnp::clone(*m.second)));
