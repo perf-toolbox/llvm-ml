@@ -110,7 +110,10 @@ cc_binary(
       ":target",
       ":graph",
       "@//third_party:indicators",
-    ]
+    ],
+    visibility = [
+      "//tests:__pkg__",
+    ],
 )
 
 cc_binary(
