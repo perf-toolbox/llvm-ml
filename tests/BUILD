@@ -26,6 +26,7 @@ glob_lit_tests(
         "//utils:mc-data-gen",
         "//tools:llvm-mc-dataset",
         "//tools:llvm-mc-bench",
+        "//tools:llvm-mc-extract",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:count",
         "@llvm-project//llvm:not",

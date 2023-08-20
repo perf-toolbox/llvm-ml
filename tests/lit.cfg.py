@@ -62,6 +62,7 @@ utils = [
 tools = [
     ToolSubst('%llvm-mc-dataset', FindTool('llvm-mc-dataset')),
     ToolSubst('%llvm-mc-bench', FindTool('llvm-mc-bench')),
+    ToolSubst('%llvm-mc-extract', FindTool('llvm-mc-extract')),
 ]
 
 llvm_config.add_tool_substitutions(llvm_tools, config.llvm_tools_dir)

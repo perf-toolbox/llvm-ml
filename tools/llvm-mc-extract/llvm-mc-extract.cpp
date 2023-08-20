@@ -48,14 +48,16 @@
 using namespace llvm;
 namespace fs = std::filesystem;
 
+cl::OptionCategory ToolOptions("llvm-mc-extract specific options");
+
 static cl::opt<std::string> InputFilename(cl::Positional,
-                                          cl::desc("<input file>"));
+                                          cl::desc("<input file>"), cl::cat(ToolOptions));
 
-static cl::opt<std::string> OutputDirectory("o", cl::desc("output directory"),
-                                            cl::Required);
+static cl::opt<std::string> OutputDirectory("asm-dir", cl::desc("Directory to store assembly files"),
+                                            cl::Required, cl::cat(ToolOptions));
 
-static cl::opt<std::string> Prefix("prefix", cl::desc("result files prefix"),
-                                   cl::Required);
+static cl::opt<std::string> Prefix("prefix", cl::desc("Result files prefix"),
+                                   cl::Required, cl::cat(ToolOptions));
 
 static cl::opt<std::string>
     ArchName("arch", cl::desc("Target arch to assemble for, "
@@ -68,10 +70,10 @@ static cl::opt<std::string>
 static cl::opt<bool> Postprocess(
     "postprocess",
     cl::desc(
-        "Apply postprocessing: remove move-only blocks, empty blocks, etc"));
+        "Apply postprocessing: remove move-only blocks, empty blocks, etc"), cl::cat(ToolOptions));
 static cl::opt<bool>
     PostprocessOnly("postprocess-only",
-                    cl::desc("Only run postprocessing on extracted data"));
+                    cl::desc("Only run postprocessing on extracted data"), cl::cat(ToolOptions));
 
 static llvm::mc::RegisterMCTargetOptionsFlags MOF;
 
@@ -478,28 +480,33 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  ErrorOr<std::unique_ptr<MemoryBuffer>> fileOrErr =
-      MemoryBuffer::getFile(InputFilename, /*IsText=*/false);
-  if (std::error_code errc = fileOrErr.getError()) {
-    errs() << "Error reading file: " << errc.message() << "\n";
-    return 1;
-  }
+  if (!PostprocessOnly) {
+    if (InputFilename.empty()) {
+      errs() << "No input file name was provided\n";
+      return 1;
+    }
+    ErrorOr<std::unique_ptr<MemoryBuffer>> fileOrErr =
+        MemoryBuffer::getFile(InputFilename, /*IsText=*/false);
+    if (std::error_code errc = fileOrErr.getError()) {
+      errs() << "Error reading file: " << errc.message() << "\n";
+      return 1;
+    }
 
-  Expected<std::unique_ptr<object::ObjectFile>> objOrErr =
-      object::ObjectFile::createObjectFile(fileOrErr->get()->getMemBufferRef());
-  if (!objOrErr) {
-    errs() << "Error creating object file: " << toString(objOrErr.takeError())
-           << "\n";
-    return 1;
-  }
+    Expected<std::unique_ptr<object::ObjectFile>> objOrErr =
+        object::ObjectFile::createObjectFile(fileOrErr->get()->getMemBufferRef());
+    if (!objOrErr) {
+      errs() << "Error creating object file: " << toString(objOrErr.takeError())
+             << "\n";
+      return 1;
+    }
 
-  const Target *target = getTarget(objOrErr.get().get());
-  if (!target) {
-    return 1;
-  }
+    const Target *target = getTarget(objOrErr.get().get());
+    if (!target) {
+      return 1;
+    }
 
-  if (!PostprocessOnly)
     extractBasicBlocks(*objOrErr.get(), target, Triple(TripleName));
+  }
 
   if (Postprocess || PostprocessOnly)
     postprocess();
