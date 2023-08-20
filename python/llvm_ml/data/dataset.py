@@ -46,6 +46,7 @@ def load_pyg_dataset(dataset_path, use_binary_opcode=True, prefilter=True):
                 self.data.append(Data(x=torch.from_numpy(nodes), edge_index=torch.from_numpy(np.transpose(edges)).contiguous(), y=torch.tensor(bb.measured_cycles)))
                 self.basic_blocks.append({
                     'source': bb.source,
+                    'id': bb.id,
                 })
 
 
