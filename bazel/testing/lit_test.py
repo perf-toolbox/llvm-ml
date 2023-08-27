@@ -29,7 +29,7 @@ def main():
     parsed_args = _parse_args()
 
     args = [
-        str(Path(os.environ["TEST_SRCDIR"]).joinpath("_main~init_llvm~llvm-project/llvm/lit")),
+        str(Path(os.environ["TEST_SRCDIR"]).joinpath("llvm~override~init_llvm~llvm-project/llvm/lit")),
         str(Path.cwd().joinpath(parsed_args.package_name)),
         "-v",
     ]

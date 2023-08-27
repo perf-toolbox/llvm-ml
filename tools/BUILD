@@ -2,28 +2,6 @@ load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("//bazel:packaging_utils.bzl", "shared_object_path_selector")
 
 cc_library(
-    name = "target",
-    srcs = [
-        "target/Target.cpp",
-        "target/X86Target.cpp",
-    ],
-    hdrs = [
-        "target/Target.hpp"
-    ],
-    include_prefix = "llvm-ml",
-    visibility = ["//visibility:public"],
-    deps = [
-        "@llvm-project//llvm:Support",
-        "@llvm-project//llvm:MC",
-        "@llvm-project//llvm:MCParser",
-        "@llvm-project//llvm:MCDisassembler",
-        "@llvm-project//llvm:Target",
-        "@llvm-project//llvm:X86CommonTableGen",
-        "@llvm-project//llvm:X86UtilsAndDesc",
-    ]
-)
-
-cc_library(
     name = "llvm-mc-bench-lib",
     hdrs = [
       "llvm-mc-bench/counters.hpp",
@@ -55,31 +33,13 @@ cc_library(
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
-      ":target",
+      "@llvm-ml-libs//:target",
       "@llvm-ml-libs//:cpp_structures",
       "//third_party:libpmu",
       "@//third_party:indicators",
       "@range-v3",
     ],
     visibility = ["//tools:__pkg__", "//utils:__pkg__"],
-)
-
-cc_library(
-    name = "graph",
-    hdrs = [
-        "graph/Graph.hpp",
-    ],
-    srcs = [
-        "graph/Graph.cpp",
-    ],
-    include_prefix = "llvm-ml",
-    visibility = ["//visibility:public"],
-    deps = [
-        "@llvm-project//llvm:Support",
-        "@llvm-project//llvm:MC",
-        "@llvm-project//llvm:Target",
-        ":target",
-    ],
 )
 
 cc_binary(
@@ -90,7 +50,7 @@ cc_binary(
     deps = [
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
-      ":target",
+      "@llvm-ml-libs//:target",
     ],
     visibility = [
       "//tests:__pkg__",
@@ -108,8 +68,8 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
-      ":target",
-      ":graph",
+      "@llvm-ml-libs//:target",
+      "@llvm-ml-libs//:graph",
       "@//third_party:indicators",
     ],
     visibility = [
@@ -128,8 +88,8 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@nlohmann_json//:json",
-      ":target",
-      ":graph",
+      "@llvm-ml-libs//:target",
+      "@llvm-ml-libs//:graph",
       "@llvm-ml-libs//:cpp_structures",
       "@//third_party:indicators",
     ]

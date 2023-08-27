@@ -9,11 +9,14 @@ bazel_dep(name = "llvm-ml-py", version = "0.0.1")
 bazel_dep(name = "llvm-ml-libs", version = "0.0.1")
 bazel_dep(name = "rules_pkg", version = "0.9.1")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
+bazel_dep(name = "llvm", version = "")
+
+local_path_override(module_name = "llvm", path = "third_party/llvm")
 
 non_module_dependencies = use_extension("//bazel:extensions.bzl", "non_module_dependencies")
-use_repo(non_module_dependencies, "llvm-raw", "llvm_zlib", "llvm_zstd", "range-v3")
+use_repo(non_module_dependencies, "range-v3")
 
-llvm = use_extension("//bazel:llvm.bzl", "init_llvm")
+llvm = use_extension("@llvm//:llvm.bzl", "init_llvm")
 use_repo(llvm, "llvm-project")
 
 local_path_override(module_name = "llvm-ml-py", path = "python")
