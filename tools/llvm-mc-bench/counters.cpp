@@ -57,7 +57,9 @@ public:
     pmu::Builder builder;
     builder.add_counter(pmu::CounterKind::Cycles)
         .add_counter(pmu::CounterKind::Instructions)
-        .add_counter(pmu::CounterKind::CacheMisses)
+        .add_counter(pmu::CacheCounter{.level = pmu::CacheLevelKind::L1D,
+                                       .kind = pmu::CacheCounterKind::Miss,
+                                       .op = pmu::CacheOpKind::Read})
         .add_counter("SW:context_switches");
     mCounters = builder.build();
   }
