@@ -80,7 +80,7 @@ public:
         counters.push_back(
             CounterValue{.type = Counter::Instructions,
                          .value = static_cast<size_t>(value.value)});
-      } else if (value.name.starts_with("cache_")) {
+      } else if (value.name.starts_with("cache")) {
         counters.push_back(
             CounterValue{.type = Counter::CacheMisses,
                          .value = static_cast<size_t>(value.value)});
