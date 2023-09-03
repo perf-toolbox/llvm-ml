@@ -40,10 +40,11 @@ static void createSingleCPUTestFunction(StringRef functionName,
   std::string startName = ("workload_start_" + functionName).str();
   std::string endName = ("workload_end_" + functionName).str();
 
+  inlineAsm.createSaveState(builder);
   builder.CreateCall(countersFuncTy, func->getArg(kArgCountersStart),
                      {func->getArg(kArgCountersCtx)});
 
-  inlineAsm.createSaveState(builder);
+  inlineAsm.createSetupEnv(builder);
 
   inlineAsm.createBranch(builder, startName);
   inlineAsm.createLabel(builder, startName);
@@ -66,6 +67,7 @@ static void createSingleCPUTestFunction(StringRef functionName,
   inlineAsm.createBranch(builder, endName);
   inlineAsm.createLabel(builder, endName);
 
+  inlineAsm.createRestoreEnv(builder);
   inlineAsm.createRestoreState(builder);
   builder.CreateCall(countersFuncTy, func->getArg(kArgCountersStop),
                      {func->getArg(kArgCountersCtx)});

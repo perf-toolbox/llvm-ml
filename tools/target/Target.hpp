@@ -30,7 +30,9 @@ namespace llvm_ml {
 class InlineAsmBuilder {
 public:
   virtual void createSaveState(llvm::IRBuilderBase &builder) = 0;
+  virtual void createSetupEnv(llvm::IRBuilderBase &builder) = 0;
   virtual void createRestoreState(llvm::IRBuilderBase &builder) = 0;
+  virtual void createRestoreEnv(llvm::IRBuilderBase &builder) = 0;
   virtual void createBranch(llvm::IRBuilderBase &builder,
                             llvm::StringRef label) = 0;
   virtual void createLabel(llvm::IRBuilderBase &builder,
