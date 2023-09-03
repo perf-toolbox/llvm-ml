@@ -107,7 +107,7 @@ static std::pair<int, unsigned> allocatePhysicalPage() {
     llvm::errs() << "Failed to allocate physical page\n";
     abort();
   }
-  if (ftruncate(fd, 4 * sysconf(_SC_PAGE_SIZE)) != 0) {
+  if (ftruncate(fd, 5 * sysconf(_SC_PAGE_SIZE)) != 0) {
     llvm::errs() << "Failed to truncate shmem file: " << strerror(errno)
                  << "\n";
     abort();
@@ -156,8 +156,16 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     size_t shift = reinterpret_cast<size_t>(addr) >> std::bit_width(pageSize);
     void *pageAddr =
         reinterpret_cast<void *>(shift << std::bit_width(pageSize));
-    res =
-        mmap(pageAddr, 4 * pageSize, PROT_READ | PROT_WRITE, flags, shmemFD, 0);
+
+    const auto [numPages, offset] = [&addr]() -> std::pair<size_t, size_t> {
+      if (reinterpret_cast<size_t>(addr) == 0x2323000)
+        return {5, 0};
+
+      return {4, PAGE_SIZE};
+    }();
+
+    res = mmap(pageAddr, numPages * pageSize, PROT_READ | PROT_WRITE, flags,
+               shmemFD, offset);
     if (res != pageAddr) {
       llvm::errs() << "Requested address " << pageAddr << " got " << res
                    << " shift " << std::bit_width(pageSize) << "\n";
@@ -169,7 +177,12 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
       abort();
     }
 
-    __builtin_prefetch(addr, 0, 0);
+// 64 here stands for cache line size
+// FIXME(Alex): find a more portable way
+#pragma unroll
+    for (size_t i = 0; i < numPages * pageSize; i += 64) {
+      __builtin_prefetch(static_cast<char *>(pageAddr) + i, 0, 3);
+    }
   }
 
   size_t runId = 0;
@@ -201,6 +214,7 @@ static void runHarness(llvm::StringRef libPath, std::string harnessName,
     fn(nullptr, reinterpret_cast<void *>(&fake_bench),
        reinterpret_cast<void *>(&fake_bench), out);
 
+  prefetchCounters(counters.get());
   for (int i = 0; i < numRuns; i++) {
     // Voluntarily give up processor time to get a full CPU slice.
     std::this_thread::yield();
@@ -341,6 +355,8 @@ llvm::Error CPUBenchmarkRunner::runSingleBenchmark(
 
     if (status.reason == ExitReason::Segfault) {
       if (status.ip == lastSignaledInstruction) {
+        llvm::errs() << "Failed IP: " << status.ip << "\n";
+        llvm::errs() << "Failed addr: " << status.memAddr << "\n";
         return llvm::createStringError(std::errc::executable_format_error,
                                        "The same instruction segfaulted twice");
       }

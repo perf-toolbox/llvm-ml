@@ -24,6 +24,7 @@ public:
   virtual void start() = 0;
   virtual void stop() = 0;
   virtual void flush() = 0;
+  virtual void prefetch() = 0;
 
   virtual ~CountersContext() = default;
 };
@@ -46,6 +47,8 @@ public:
 
     mCB(counters);
   }
+
+  void prefetch() override {}
 
 private:
   CountersCb mCB;
@@ -94,12 +97,19 @@ public:
     mCB(counters);
   }
 
+  void prefetch() override {
+    __builtin_prefetch(this, 0, 3);
+    __builtin_prefetch(mCounters.get(), 0, 3);
+  }
+
 private:
   CountersCb mCB;
   std::unique_ptr<pmu::Counters> mCounters;
 };
 
 void flushCounters(CountersContext *ctx) { ctx->flush(); }
+
+void prefetchCounters(CountersContext *ctx) { ctx->prefetch(); }
 
 std::shared_ptr<CountersContext> createCounters(CountersCb cb) {
   if (std::getenv("LLVM_ML_BENCH_MOCK") != nullptr)

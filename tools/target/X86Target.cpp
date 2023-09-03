@@ -17,7 +17,7 @@
 
 #include "MCTargetDesc/X86BaseInfo.h"
 
-constexpr auto PrologueX64 = R"(
+constexpr auto SaveState = R"(
   push %rax
   push %rbx
   push %rcx
@@ -33,6 +33,41 @@ constexpr auto PrologueX64 = R"(
   push %r14
   push %r15
 
+  movq $$0xFFFFFFFFFFFFFFFF, %rax
+  movq $$0xFFFFFFFFFFFFFFFF, %rdx
+  xsave64 0x2323000
+
+  vzeroall
+
+  add $$-128, %rsp
+  pushf
+  orl $$0x40000, (%rsp)
+  popf
+  sub $$-128, %rsp
+)";
+
+constexpr auto RestoreState = R"(
+  movq $$0xFFFFFFFFFFFFFFFF, %rax
+  movq $$0xFFFFFFFFFFFFFFFF, %rdx
+  xrstor64 0x2323000
+
+  pop %r15
+  pop %r14
+  pop %r13
+  pop %r12
+  pop %r11
+  pop %r10
+  pop %r9
+  pop %r8
+  pop %rdi
+  pop %rsi
+  pop %rdx
+  pop %rcx
+  pop %rbx
+  pop %rax
+)";
+
+constexpr auto PrologueX64 = R"(
   movq %rbp, %rax
   movq $$0x2325000, %rbx
   movq %rax, (%rbx)
@@ -52,12 +87,6 @@ constexpr auto PrologueX64 = R"(
   shl $$5, %rsp
   sub $$0x10, %rsp
 
-  add $$-128, %rsp
-  pushf
-  orl $$0x40000, (%rsp)
-  popf
-  sub $$-128, %rsp
-
   movq $$0x2324000, %rax 
   movq $$0x2324000, %rbx  
   movq $$0x2324000, %rcx 
@@ -74,27 +103,6 @@ constexpr auto PrologueX64 = R"(
   movq $$0x2324000, %r15 
 )";
 
-constexpr auto PrologueAVX = R"(
-  pushq %rax
-  vbroadcastsd 40(%rsp), %ymm0
-  vbroadcastsd 40(%rsp), %ymm1
-  vbroadcastsd 40(%rsp), %ymm2
-  vbroadcastsd 40(%rsp), %ymm3
-  vbroadcastsd 40(%rsp), %ymm4
-  vbroadcastsd 40(%rsp), %ymm5
-  vbroadcastsd 40(%rsp), %ymm6
-  vbroadcastsd 40(%rsp), %ymm7
-  vbroadcastsd 40(%rsp), %ymm8
-  vbroadcastsd 40(%rsp), %ymm9
-  vbroadcastsd 40(%rsp), %ymm10
-  vbroadcastsd 40(%rsp), %ymm11
-  vbroadcastsd 40(%rsp), %ymm12
-  vbroadcastsd 40(%rsp), %ymm13
-  vbroadcastsd 40(%rsp), %ymm14
-  vbroadcastsd 40(%rsp), %ymm15
-  popq %rax
-)";
-
 constexpr auto Epilogue = R"(
   add $$-128, %rsp
   pushf
@@ -108,26 +116,26 @@ constexpr auto Epilogue = R"(
 
   movq 16(%rbx), %rax
   movq %rax, %rsp
-
-  pop %r15
-  pop %r14
-  pop %r13
-  pop %r12
-  pop %r11
-  pop %r10
-  pop %r9
-  pop %r8
-  pop %rdi
-  pop %rsi
-  pop %rdx
-  pop %rcx
-  pop %rbx
-  pop %rax
 )";
 
 namespace {
 class X86InlineAsmBuilder : public llvm_ml::InlineAsmBuilder {
 public:
+  void createSetupEnv(llvm::IRBuilderBase &builder) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, PrologueX64,
+                                          "~{dirflag},~{fpsr},~{flags}", true);
+    builder.CreateCall(asmCallee);
+  }
+
+  void createRestoreEnv(llvm::IRBuilderBase &builder) override {
+    auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, Epilogue,
+                                          "~{dirflag},~{fpsr},~{flags}", true);
+    builder.CreateCall(asmCallee);
+  }
+
   void createSaveState(llvm::IRBuilderBase &builder) override {
     llvm::Type *i32ty = llvm::Type::getInt32Ty(builder.getContext());
     llvm::Type *ptr = i32ty->getPointerTo();
@@ -147,18 +155,14 @@ public:
                             llvm::Intrinsic::x86_sse_ldmxcsr, {alloca});
 
     auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
-
-    // TODO can we use fxsave here?
-    // TODO can we just enumerate all registers for current target?
-    auto asmCallee =
-        llvm::InlineAsm::get(voidFuncTy, std::string(PrologueX64) + PrologueAVX,
-                             "~{dirflag},~{fpsr},~{flags}", true);
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, SaveState,
+                                          "~{dirflag},~{fpsr},~{flags}", true);
     builder.CreateCall(asmCallee);
   }
 
   void createRestoreState(llvm::IRBuilderBase &builder) override {
     auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
-    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, Epilogue,
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, RestoreState,
                                           "~{dirflag},~{fpsr},~{flags}", true);
     builder.CreateCall(asmCallee);
 
@@ -172,6 +176,7 @@ public:
     builder.CreateIntrinsic(builder.getVoidTy(),
                             llvm::Intrinsic::x86_sse_ldmxcsr, {alloca});
   }
+
   void createBranch(llvm::IRBuilderBase &builder,
                     llvm::StringRef label) override {
     auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
