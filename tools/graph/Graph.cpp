@@ -51,11 +51,17 @@ llvm_ml::Graph llvm_ml::convertMCInstructionsToGraph(
     auto writeRegs = mlTarget.getReadRegisters(instructions[i]);
 
     for (unsigned reg : readRegs) {
+      size_t offset = static_cast<size_t>(addVirtualRoot == true);
       if (lastWrite.count(reg)) {
-        size_t offset = static_cast<size_t>(addVirtualRoot == true);
         EdgeFeatures ef;
         ef.isData = true;
         graph.addEdge(lastWrite.at(reg) + offset, i + offset, ef);
+      }
+
+      if (writeRegs.count(reg)) {
+        EdgeFeatures ef;
+        ef.isData = true;
+        graph.addEdge(i + offset, i + offset, ef);
       }
     }
 
