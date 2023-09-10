@@ -87,14 +87,16 @@ def plot_graph(graph, node_colors, source_str, filename):
 
 
 def get_fig_data(basic_block):
+    id = f"Basic block id: {basic_block.id}\n"
+
     source_lines = basic_block.source.split("\n")
     source_lines = [
         x.strip().replace("\t", "    ") for x in source_lines if x.strip().replace("\t", "") != '']
     source_str = '\n'.join(source_lines)
     source_str += "\n"
 
-    measured_cycles = f"Measured cycles: {basic_block.measured_cycles}"
-    cov = f"Coefficient of variation: {basic_block.cov}"
+    measured_cycles = f"Measured cycles: {basic_block.measured_cycles:.2f}"
+    cov = f"Coefficient of variation: {basic_block.cov:.2f}"
 
     return '\n'.join([source_str, measured_cycles, cov])
 
@@ -110,7 +112,7 @@ def plot_distribution(path, markdown, cycles):
 
 
 def print_sample(sample_id, basic_block, base_path, markdown):
-    asm_path = os.path.join(base_path, f"asm_{sample_id}.s")
+    asm_path = os.path.join(base_path, f"asm_{sample_id}_{basic_block.id}.s")
     asm_file = open(asm_path, 'w')
     asm_file.write(basic_block.source)
     asm_file.close()
@@ -149,7 +151,7 @@ markdown = open(os.path.join(args.output, "report.md"), 'w')
 markdown.write(f"# Report for {args.filename}\n\n")
 markdown.write(f"## Basic info\n\n")
 markdown.write(f"Total samples: {len(basic_blocks)}\n")
-markdown.write(f"Mean coefficient of variation: {mean_cov}\n")
+markdown.write(f"Mean coefficient of variation: {mean_cov:.2f}\n")
 
 markdown.write("\n## Cycles distribution\n\n")
 cycles = np.array([bb.measured_cycles for bb in basic_blocks])
@@ -162,14 +164,16 @@ markdown.write(f"## 5 random samples\n\n")
 for i in range(5):
     bb = random.choice(basic_blocks)
     markdown.write(f"### Sample {i + 1}\n\n")
-    markdown.write(f"Cycles: {bb.measured_cycles}\n")
+    markdown.write(f"Cycles: {bb.measured_cycles:.2f}\n")
+    markdown.write(f"CoV: {bb.cov:.2f}\n")
     print_sample(i + 1, bb, args.output, markdown)
 
 markdown.write(f"## 10 longest samples\n\n")
 num_longest = 1
 for bb in basic_blocks[-10:]:
     markdown.write(f"### Sample {num_longest}\n\n")
-    markdown.write(f"Cycles: {bb.measured_cycles}\n")
+    markdown.write(f"Cycles: {bb.measured_cycles:.2f}\n")
+    markdown.write(f"CoV: {bb.cov:.2f}\n")
     print_sample(f"longest_{num_longest}", bb, args.output, markdown)
     num_longest += 1
 
