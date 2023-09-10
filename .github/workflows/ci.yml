@@ -42,7 +42,7 @@ jobs:
       uses: test-summary/action@v2
       with:
         paths: "bazel-testlogs/**/test.xml"
-      if: !cancelled()
+      if: ${{ !cancelled() }}
     - name: generate tools archive
       run: bazel build --config=ci //:llvm_ml_tools
     - uses: actions/upload-artifact@v3
