@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
       // FIXME: capnproto design does not allow to do it without a copy
       llvm::SmallVector<double, 100> cycles;
       for (const auto &s : m.second->getWorkloadSamples())
-        cycles.push_back(s.getCycles());
+        cycles.push_back(static_cast<double>(s.getCycles()) / s.getNumRepeat());
 
       double cov = llvm_ml::stat::coefficient_of_variation(cycles);
 
