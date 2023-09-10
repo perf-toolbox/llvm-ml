@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
   llvm_ml::MCDataset::Builder dataset = message.initRoot<llvm_ml::MCDataset>();
 
   std::vector<std::tuple<std::string, kj::Own<llvm_ml::MCGraph::Reader>,
-                         kj::Own<llvm_ml::MCMetrics::Reader>>>
+                         kj::Own<llvm_ml::MCMetrics::Reader>, double>>
       measuredPairs;
 
   {
@@ -157,18 +157,17 @@ int main(int argc, char **argv) {
       if (!graphs.count(m.first))
         continue;
 
-      if (MaxCoV != 100) {
-        double mean = average(*m.second);
-        double sigma = standardDeviation(*m.second, mean);
+      double mean = average(*m.second);
+      double sigma = standardDeviation(*m.second, mean);
 
-        double cov = mean / sigma;
+      double cov = mean / sigma;
 
-        if (cov > maxCoV)
-          continue;
-      }
+      if (MaxCoV != 100 && cov > maxCoV)
+        continue;
 
-      measuredPairs.push_back(std::make_tuple(
-          m.first, capnp::clone(*graphs.at(m.first)), capnp::clone(*m.second)));
+      measuredPairs.push_back(std::make_tuple(m.first,
+                                              capnp::clone(*graphs.at(m.first)),
+                                              capnp::clone(*m.second), cov));
     }
   }
 
@@ -179,6 +178,7 @@ int main(int argc, char **argv) {
     piece.setGraph(*std::get<1>(measuredPairs[i]));
     piece.setMetrics(*std::get<2>(measuredPairs[i]));
     piece.setId(std::get<0>(measuredPairs[i]));
+    piece.setCov(std::get<3>(measuredPairs[i]));
   }
 
   llvm_ml::writeToFile(std::string(OutFile), message);
