@@ -34,8 +34,15 @@ jobs:
           scratch-${{ runner.os }}
     - name: build
       run: bazel build --config=ci //...
+    - name: lib tests
+      run: bazel test --config=ci @llvm-ml-libs//... 
     - name: lit tests
       run: bazel test --config=ci //tests/...
+    - name: test summary
+      uses: test-summary/action@v2
+      with:
+        paths: "bazel-testlogs/**/test.xml"
+      if: !cancelled()
     - name: generate tools archive
       run: bazel build --config=ci //:llvm_ml_tools
     - uses: actions/upload-artifact@v3

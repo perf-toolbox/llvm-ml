@@ -4,6 +4,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm-ml/structures/structures.hpp"
+#include "llvm-ml/statistics/cov.hpp"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -14,6 +15,8 @@
 #include <fstream>
 #include <future>
 #include <map>
+#include <range/v3/algorithm/transform.hpp>
+#include <range/v3/view/transform.hpp>
 
 using namespace llvm;
 namespace fs = std::filesystem;
@@ -31,31 +34,6 @@ static cl::opt<unsigned>
            cl::desc("maximum allowed coefficient of variation, integer value "
                     "in the range 1 to 100"),
            cl::init(10));
-
-static double average(const llvm_ml::MCMetrics::Reader &reader) {
-  double sum = 0.0;
-  for (const auto &sample : reader.getWorkloadSamples()) {
-    sum += sample.getCycles();
-  }
-
-  return sum / reader.getWorkloadSamples().size();
-}
-
-static double standardDeviation(const llvm_ml::MCMetrics::Reader &reader,
-                                double mean) {
-  const auto square_diff = [](uint64_t a, double b) -> double {
-    double diff = static_cast<double>(a) - b;
-    return diff * diff;
-  };
-
-  double sum = 0.0;
-
-  for (const auto &sample : reader.getWorkloadSamples()) {
-    sum += square_diff(sample.getCycles(), mean);
-  }
-
-  return std::sqrt(sum / reader.getWorkloadSamples().size());
-}
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
@@ -157,12 +135,14 @@ int main(int argc, char **argv) {
       if (!graphs.count(m.first))
         continue;
 
-      double mean = average(*m.second);
-      double sigma = standardDeviation(*m.second, mean);
+      // FIXME: capnproto design does not allow to do it without a copy
+      llvm::SmallVector<double, 100> cycles;
+      for (const auto &s : m.second->getWorkloadSamples())
+        cycles.push_back(s.getCycles());
 
-      double cov = mean / sigma;
+      double cov = llvm_ml::stat::coefficient_of_variation(cycles);
 
-      if (MaxCoV != 100 && cov > maxCoV)
+      if (std::isnan(cov) || (MaxCoV != 100 && cov > maxCoV))
         continue;
 
       measuredPairs.push_back(std::make_tuple(m.first,

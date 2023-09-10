@@ -101,8 +101,10 @@ cc_binary(
       "llvm-mc-dataset/llvm-mc-dataset.cpp",
     ],
     deps = [
-      "@llvm-project//llvm:Support",
-      "@llvm-ml-libs//:cpp_structures",
+        "@llvm-project//llvm:Support",
+        "@llvm-ml-libs//:cpp_structures",
+        "@llvm-ml-libs//:statistics",
+        "@range-v3",
     ],
     visibility = [
       "//tests:__pkg__",
