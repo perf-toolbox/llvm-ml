@@ -10,6 +10,7 @@ struct MCDataPiece {
   metrics @0 : Metrics.MCMetrics;
   graph @1 : Graph.MCGraph;
   id @2 : Text;
+  cov @3 : Float32;
 }
 
 struct MCDataset {
