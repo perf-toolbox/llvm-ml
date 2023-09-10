@@ -42,7 +42,7 @@ cc_binary(
     deps = [
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
-      "@//tools:target",
+      "@llvm-ml-libs//:target",
     ],
     visibility = [
       "//tests:__pkg__",

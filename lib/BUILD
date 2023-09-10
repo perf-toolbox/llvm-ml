@@ -53,3 +53,42 @@ cc_shared_library(
     visibility = ["//visibility:public"]
 )
 
+cc_library(
+    name = "target",
+    srcs = [
+        "target/Target.cpp",
+        "target/X86Target.cpp",
+    ],
+    hdrs = [
+        "target/Target.hpp"
+    ],
+    include_prefix = "llvm-ml",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:MCParser",
+        "@llvm-project//llvm:MCDisassembler",
+        "@llvm-project//llvm:Target",
+        "@llvm-project//llvm:X86CommonTableGen",
+        "@llvm-project//llvm:X86UtilsAndDesc",
+    ]
+)
+
+cc_library(
+    name = "graph",
+    hdrs = [
+        "graph/Graph.hpp",
+    ],
+    srcs = [
+        "graph/Graph.cpp",
+    ],
+    include_prefix = "llvm-ml",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:Target",
+        ":target",
+    ],
+)
