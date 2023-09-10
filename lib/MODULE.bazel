@@ -5,6 +5,7 @@ bazel_dep(name = "rules_cc", version = "0.0.6")
 bazel_dep(name = "platforms", version = "0.0.6")
 bazel_dep(name = "rules_python", version = "0.24.0")
 bazel_dep(name = "llvm", version = "")
+bazel_dep(name = "catch2", version = "3.4.0")
 
 local_path_override(module_name = "llvm", path = "../third_party/llvm")
 

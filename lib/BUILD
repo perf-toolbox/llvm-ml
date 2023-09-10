@@ -92,3 +92,24 @@ cc_library(
         ":target",
     ],
 )
+
+cc_library(
+    name = "statistics",
+    hdrs = [
+        "statistics/cov.hpp",
+    ],
+    include_prefix = "llvm-ml",
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "statistics_test",
+    srcs = [
+        "unittests/cov.cpp",
+    ],
+    deps = [
+        ":statistics",
+        "@catch2",
+        "@catch2//:catch2_main",
+    ]
+)

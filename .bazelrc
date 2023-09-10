@@ -37,6 +37,8 @@ build:ci -c fastbuild
 build:ci --disk_cache=./bzl-cache
 build:ci --sandbox_writable_path=/home/runner/.cargo
 
+test:ci --verbose_failures=true 
+
 # Include user defines
 # It's a good practice to put something like 
 try-import %workspace%/user.bazelrc
