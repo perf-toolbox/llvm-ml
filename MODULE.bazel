@@ -16,6 +16,8 @@ local_path_override(module_name = "llvm", path = "third_party/llvm")
 non_module_dependencies = use_extension("//bazel:extensions.bzl", "non_module_dependencies")
 use_repo(non_module_dependencies, "range-v3")
 
+llvm_non_module = use_extension("@llvm//:extensions.bzl", "non_module_dependencies")
+use_repo(llvm_non_module, "llvm_zstd")
 llvm = use_extension("@llvm//:llvm.bzl", "init_llvm")
 use_repo(llvm, "llvm-project")
 
