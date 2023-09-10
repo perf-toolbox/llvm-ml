@@ -137,6 +137,13 @@ int main(int argc, char **argv) {
 
       // FIXME: capnproto design does not allow to do it without a copy
       llvm::SmallVector<double, 100> cycles;
+
+      // Workaround for a bug in earlier versions of the dataset
+      if (m.second->getWorkloadSamples().size() == 0)
+        for (const auto &s : m.second->getNoiseSamples())
+          cycles.push_back(static_cast<double>(s.getCycles()) /
+                           s.getNumRepeat());
+
       for (const auto &s : m.second->getWorkloadSamples())
         cycles.push_back(static_cast<double>(s.getCycles()) / s.getNumRepeat());
 

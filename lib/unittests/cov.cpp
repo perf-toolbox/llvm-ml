@@ -32,5 +32,5 @@ TEST_CASE("Coefficient of variation", "[statistics/cov.hpp]") {
 
   double cov = llvm_ml::stat::coefficient_of_variation(values);
 
-  REQUIRE_THAT(cov, Catch::Matchers::WithinAbs(2.1213203436, 0.01));
+  REQUIRE_THAT(cov, Catch::Matchers::WithinAbs(0.4714, 0.01));
 }

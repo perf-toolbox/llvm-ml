@@ -5,10 +5,11 @@
 
 #pragma once
 
-#include <ranges>
-#include <iterator>
-#include <concepts>
 #include <cmath>
+#include <concepts>
+#include <iterator>
+#include <numeric>
+#include <ranges>
 
 namespace llvm_ml::stat {
 template <typename T>
@@ -18,32 +19,41 @@ concept stat_range = (std::floating_point<std::ranges::range_value_t<T>> || std:
 };
 
 constexpr double mean(const stat_range auto &input) {
-  double sum = 0.0;
+  const size_t size = std::ranges::size(input);
 
-  for (const auto &value : input)
-    sum += value;
+  if (size == 0)
+    return std::numeric_limits<double>::quiet_NaN();
 
-  return sum / std::ranges::size(input);
+  double sum = std::accumulate(input.begin(), input.end(), 0.0);
+
+  return sum / size;
 }
 
 constexpr double standard_deviation(const stat_range auto &input, double mean) {
-  const auto square_diff = [](auto a, double b) {
-    double diff = static_cast<double>(a) - b;
-    return diff * diff;
+  const size_t size = std::ranges::size(input);
+
+  if (size == 0)
+    return std::numeric_limits<double>::quiet_NaN();
+
+  const auto square_diff = [mean](double sum, auto value) {
+    double diff = static_cast<double>(value) - mean;
+    return sum + (diff * diff);
   };
 
-  double sum = 0.0;
+  double sum = std::accumulate(input.begin(), input.end(), 0.0, square_diff);
 
-  for (const auto &value : input)
-    sum += square_diff(value, mean);
-
-  return std::sqrt(sum / std::ranges::size(input));
+  return std::sqrt(sum / size);
 }
 
 constexpr double coefficient_of_variation(const stat_range auto &input) {
+  const size_t size = std::ranges::size(input);
+
+  if (size == 0)
+    return std::numeric_limits<double>::quiet_NaN();
+
   double mean = llvm_ml::stat::mean(input);
   double sigma = standard_deviation(input, mean);
 
-  return mean / sigma;
+  return sigma / mean;
 }
 }

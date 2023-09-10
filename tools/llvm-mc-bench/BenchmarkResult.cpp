@@ -39,7 +39,7 @@ Measurement::exportBinary(fs::path path, llvm::StringRef source,
   capnp::List<llvm_ml::MCSample>::Builder noiseSamples =
       metrics.initNoiseSamples(noise.size());
   capnp::List<llvm_ml::MCSample>::Builder workloadSamples =
-      metrics.initNoiseSamples(workload.size());
+      metrics.initWorkloadSamples(workload.size());
 
   const auto converter = [&](capnp::List<llvm_ml::MCSample>::Builder &out) {
     return
