@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib
 import llvm_ml
 import llvm_ml.utils
+import statistics
 
 
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
@@ -93,8 +94,9 @@ def get_fig_data(basic_block):
     source_str += "\n"
 
     measured_cycles = f"Measured cycles: {basic_block.measured_cycles}"
+    cov = f"Coefficient of variation: {basic_block.cov}"
 
-    return '\n'.join([source_str, measured_cycles])
+    return '\n'.join([source_str, measured_cycles, cov])
 
 
 def plot_distribution(path, markdown, cycles):
@@ -141,10 +143,13 @@ assert (os.path.isdir(args.output))
 basic_blocks = llvm_ml.utils.load_dataset(args.filename)
 basic_blocks = sorted(basic_blocks, key = lambda bb: bb.measured_cycles)
 
+mean_cov = statistics.fmean([bb.cov for bb in basic_blocks])
+
 markdown = open(os.path.join(args.output, "report.md"), 'w')
 markdown.write(f"# Report for {args.filename}\n\n")
 markdown.write(f"## Basic info\n\n")
 markdown.write(f"Total samples: {len(basic_blocks)}\n")
+markdown.write(f"Mean coefficient of variation: {mean_cov}\n")
 
 markdown.write("\n## Cycles distribution\n\n")
 cycles = np.array([bb.measured_cycles for bb in basic_blocks])
