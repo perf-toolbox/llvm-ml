@@ -5,10 +5,35 @@ load("@llvm_ml_py_pip//:requirements.bzl", "requirement")
 
 compile_pip_requirements_3_10(
     name = "requirements_3_10",
-    extra_args = ["--allow-unsafe"],
+    extra_args = ["--allow-unsafe", "--resolver=backtracking"],
     requirements_in = "requirements.in",
     requirements_txt = "requirements_lock_3_10.txt",
     requirements_windows = "requirements_windows_3_10.txt",
+)
+
+cc_library(
+    name = "py_structures_static",
+    srcs = [
+        "py_structures.cpp",
+    ],
+    deps = [
+        "@llvm-ml-libs//:cpp_structures",
+        "@nanobind",
+    ],
+    linkstatic = True,
+)
+
+cc_shared_library(
+    name = "py_structures",
+    deps = [
+        ":py_structures_static",
+    ],
+    shared_lib_name = select({
+      "@platforms//os:linux": "_llvm_ml_impl.so",
+      "@platforms//os:macos": "_llvm_ml_impl.so",
+      "//conditions:default": "",
+    }),
+    visibility = ["//visibility:public"]
 )
 
 py_library(
@@ -20,7 +45,7 @@ py_library(
     requirement("protobuf"),
   ],
   data = [
-    "@llvm-ml-libs//:py_structures",
+    ":py_structures",
     ":_llvm_ml_impl.py"
   ],
   visibility = ["//visibility:public"],
@@ -34,3 +59,4 @@ py_package(
   visibility = ["//visibility:public"]
 )
 
+exports_files(["pytest_wrapper.py"])

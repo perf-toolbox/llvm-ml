@@ -1,12 +1,28 @@
 module(name = "llvm-ml-py")
 
-bazel_dep(name = "rules_python", version = "0.24.0")
+bazel_dep(name = "rules_python", version = "0.25.0")
+bazel_dep(name = "platforms", version = "0.0.6")
 bazel_dep(name = "llvm-ml-libs", version = "")
+bazel_dep(name = "robin-map", version = "1.2.1")
 
-non_module_dependencies = use_extension("@llvm-ml-libs//:extensions.bzl", "non_module_dependencies")
-use_repo(non_module_dependencies, "capnp-cpp")
+local_path_override(
+    module_name = "llvm-ml-libs",
+    path = "../lib"
+)
+
+local_path_override(module_name = "llvm", path = "../third_party/llvm")
+
+non_module_dependencies_libs = use_extension("@llvm-ml-libs//:extensions.bzl", "non_module_dependencies")
+use_repo(non_module_dependencies_libs, "capnp-cpp")
+
+non_module_dependencies = use_extension("//:extensions.bzl", "non_module_dependencies")
+use_repo(non_module_dependencies, "nanobind")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    configure_coverage_tool = True,
+    python_version = "3.10",
+)
 
 use_repo(python, "python_3_10", "python_versions")
 

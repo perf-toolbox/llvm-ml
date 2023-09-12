@@ -4,4 +4,7 @@ matplotlib
 networkx
 scikit-learn
 protobuf
+pytest
+torch
+torch-geometric
 
