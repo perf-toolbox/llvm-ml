@@ -1,0 +1,10 @@
+load("//:defs.bzl", "pytest_test")
+
+pytest_test(
+    name = "utils",
+    srcs = ["utils.py"],
+    deps = [
+        "@llvm-ml-py//:llvm_ml",
+    ],
+    size = "small",
+)

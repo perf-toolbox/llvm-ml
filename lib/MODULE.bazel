@@ -1,6 +1,5 @@
 module(name = "llvm-ml-libs", version = "0.1")
 
-bazel_dep(name = "robin-map", version = "1.2.1")
 bazel_dep(name = "rules_cc", version = "0.0.6")
 bazel_dep(name = "platforms", version = "0.0.6")
 bazel_dep(name = "rules_python", version = "0.24.0")
@@ -10,7 +9,7 @@ bazel_dep(name = "catch2", version = "3.4.0")
 local_path_override(module_name = "llvm", path = "../third_party/llvm")
 
 non_module_dependencies = use_extension("//:extensions.bzl", "non_module_dependencies")
-use_repo(non_module_dependencies, "capnp-cpp", "nanobind", "bazel_skylib")
+use_repo(non_module_dependencies, "capnp-cpp", "bazel_skylib")
 
 llvm = use_extension("@llvm//:llvm.bzl", "init_llvm")
 use_repo(llvm, "llvm-project")

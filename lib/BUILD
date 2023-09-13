@@ -29,31 +29,6 @@ cc_library(
 )
 
 cc_library(
-    name = "py_structures_static",
-    srcs = [
-        "structures/py_structures.cpp",
-    ],
-    deps = [
-        ":cpp_structures",
-        "@nanobind",
-    ],
-    linkstatic = True,
-)
-
-cc_shared_library(
-    name = "py_structures",
-    deps = [
-        ":py_structures_static",
-    ],
-    shared_lib_name = select({
-      "@platforms//os:linux": "_llvm_ml_impl.so",
-      "@platforms//os:macos": "_llvm_ml_impl.dylib",
-      "//conditions:default": "",
-    }),
-    visibility = ["//visibility:public"]
-)
-
-cc_library(
     name = "target",
     srcs = [
         "target/Target.cpp",
