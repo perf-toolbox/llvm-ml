@@ -37,6 +37,11 @@ build:ci -c fastbuild
 build:ci --disk_cache=./bzl-cache
 build:ci --sandbox_writable_path=/home/runner/.cargo
 
+build:libc++ --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
+build:libc++ --linkopt=-stdlib=libc++ --host_linkopt=-stdlib=libc++
+build:libc++ --linkopt=-l:libc++.a --host_linkopt=-l:libc++.a
+build:libc++ --linkopt=-static-libgcc --host_linkopt=-static-libgcc
+
 test:ci --verbose_failures=true 
 
 # Include user defines
