@@ -88,6 +88,9 @@ void deduplicate(measured_pairs_t &measuredPairs) {
       lastIndex -= 1;
       duplicates += 1;
     }
+
+    curIndex += 1;
+    bar.tick();
   }
 
   measuredPairs.erase(std::next(measuredPairs.begin(), lastIndex),
