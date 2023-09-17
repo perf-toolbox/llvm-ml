@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <indicators/indicators.hpp>
 #include <map>
 #include <range/v3/algorithm/transform.hpp>
 #include <range/v3/view/transform.hpp>
@@ -34,6 +35,68 @@ static cl::opt<unsigned>
            cl::desc("maximum allowed coefficient of variation, integer value "
                     "in the range 1 to 100"),
            cl::init(10));
+
+using measured_pairs_t =
+    std::vector<std::tuple<std::string, kj::Own<llvm_ml::MCGraph::Reader>,
+                           kj::Own<llvm_ml::MCMetrics::Reader>, double>>;
+
+bool operator==(const llvm_ml::MCGraph::Reader &lhs,
+                const llvm_ml::MCGraph::Reader &rhs) {
+  if (lhs.getNodes().size() != rhs.getNodes().size())
+    return false;
+
+  for (size_t i = 0; i < lhs.getNodes().size(); i++)
+    if (lhs.getNodes()[i].getOpcode() != rhs.getNodes()[i].getOpcode())
+      return false;
+
+  return true;
+}
+
+bool operator!=(const llvm_ml::MCGraph::Reader &lhs,
+                const llvm_ml::MCGraph::Reader &rhs) {
+  return !(lhs == rhs);
+}
+
+void deduplicate(measured_pairs_t &measuredPairs) {
+  indicators::show_console_cursor(false);
+  using namespace indicators;
+
+  size_t duplicates = 0;
+
+  llvm::outs() << "Removing duplicates...\n";
+  BlockProgressBar bar{
+      option::BarWidth{80}, option::ForegroundColor{Color::green},
+      option::FontStyles{std::vector<FontStyle>{FontStyle::bold}},
+      option::MaxProgress{measuredPairs.size()}};
+
+  size_t lastIndex = measuredPairs.size();
+  size_t curIndex = 0;
+
+  while (curIndex < lastIndex) {
+    for (size_t j = curIndex + 1; j < lastIndex; j++) {
+      if (*std::get<1>(measuredPairs[curIndex]) !=
+          *std::get<1>(measuredPairs[j]))
+        continue;
+
+      size_t removeIdx = j;
+      if (std::get<2>(measuredPairs[curIndex])->getMeasuredCycles() >
+          std::get<2>(measuredPairs[j])->getMeasuredCycles()) {
+        std::swap(measuredPairs[curIndex], measuredPairs[removeIdx]);
+      }
+
+      std::swap(measuredPairs[removeIdx], measuredPairs[lastIndex]);
+      lastIndex -= 1;
+      duplicates += 1;
+    }
+  }
+
+  measuredPairs.erase(std::next(measuredPairs.begin(), lastIndex),
+                      measuredPairs.end());
+
+  llvm::outs() << "Removed " << duplicates << " duplicates\n";
+
+  indicators::show_console_cursor(true);
+}
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
@@ -157,6 +220,8 @@ int main(int argc, char **argv) {
                                               capnp::clone(*m.second), cov));
     }
   }
+
+  deduplicate(measuredPairs);
 
   capnp::List<llvm_ml::MCDataPiece>::Builder pieces =
       dataset.initData(measuredPairs.size());

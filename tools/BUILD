@@ -105,6 +105,7 @@ cc_binary(
         "@llvm-ml-libs//:cpp_structures",
         "@llvm-ml-libs//:statistics",
         "@range-v3",
+        "@//third_party:indicators",
     ],
     visibility = [
       "//tests:__pkg__",
