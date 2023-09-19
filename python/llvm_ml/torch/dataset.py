@@ -67,8 +67,8 @@ class BasicBlockDataset(Dataset):
         x = self.data[index]
         y = self.basic_blocks[index]
 
-        mask_id = None
-        original = None
+        mask_id = torch.tensor(0)
+        original = torch.tensor(0)
 
         if self.masked:
             mask_id = self.masked_ids[index]
