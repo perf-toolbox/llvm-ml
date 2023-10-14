@@ -20,28 +20,27 @@ namespace nb = nanobind;
 namespace fs = std::filesystem;
 using namespace nb::literals;
 
-template <typename Loc> struct PyBasicBlock {
+template <typename Target> struct PyBasicBlock {
   bool hasVirtualRoot;
   float measuredCycles;
   float cov; ///< Coefficient of variation
   std::string source;
   std::string id;
-  nb::ndarray<Loc, int> nodes;
-  nb::ndarray<Loc, int> edges;
+  nb::ndarray<Target, int> nodes;
+  nb::ndarray<Target, int> edges;
 };
 
-std::vector<PyBasicBlock<nb::pytorch>>
-loadPytorchDataset(const std::string &path, bool undirected) {
-  std::vector<PyBasicBlock<nb::pytorch>> result;
+template <typename Target>
+std::vector<PyBasicBlock<Target>> loadDataset(const std::string &path,
+                                              bool undirected) {
+  std::vector<PyBasicBlock<Target>> result;
 
   const auto reader = [&result,
                        undirected](llvm_ml::MCDataset::Reader &dataset) {
     result.reserve(dataset.getData().size());
 
-    // std::cerr << "Here 3\n";
-
     for (auto piece : dataset.getData()) {
-      PyBasicBlock<nb::pytorch> bb;
+      PyBasicBlock<Target> bb;
       llvm_ml::MCMetrics::Reader metrics = piece.getMetrics();
       llvm_ml::MCGraph::Reader graph = piece.getGraph();
       bb.measuredCycles =
@@ -94,18 +93,16 @@ loadPytorchDataset(const std::string &path, bool undirected) {
 
       std::array<size_t, 1> nodesShape{graph.getNodes().size()};
       std::array<size_t, 2> edgesShape{numEdges, 2};
-      bb.nodes = nb::ndarray<nb::pytorch, int>(container->nodes.data(), 1,
-                                               nodesShape.data(), owner);
-      bb.edges = nb::ndarray<nb::pytorch, int>(container->edges.data(), 2,
-                                               edgesShape.data(), owner);
-
-      // std::cerr << "Here 4\n";
+      bb.nodes = nb::ndarray<Target, int>(container->nodes.data(), 1,
+                                          nodesShape.data(), owner);
+      bb.edges = nb::ndarray<Target, int>(container->edges.data(), 2,
+                                          edgesShape.data(), owner);
 
       result.push_back(bb);
     }
   };
-  int err = llvm_ml::readFromFile<llvm_ml::MCDataset>(fs::path(path), reader);
-  if (err != 0)
+
+  if (llvm_ml::readFromFile<llvm_ml::MCDataset>(fs::path(path), reader) != 0)
     abort();
 
   return result;
@@ -122,6 +119,19 @@ NB_MODULE(_llvm_ml_impl, m) {
       .def_rw("cov", &PyBasicBlock<nb::pytorch>::cov)
       .def_rw("source", &PyBasicBlock<nb::pytorch>::source);
 
-  m.def("load_pytorch_dataset", &loadPytorchDataset, "path"_a,
+  nb::class_<PyBasicBlock<nb::numpy>>(m, "NumpyBasicBlock")
+      .def(nb::init<>())
+      .def_rw("edges", &PyBasicBlock<nb::numpy>::edges)
+      .def_rw("nodes", &PyBasicBlock<nb::numpy>::nodes)
+      .def_rw("measured_cycles", &PyBasicBlock<nb::numpy>::measuredCycles)
+      .def_rw("has_virtual_root", &PyBasicBlock<nb::numpy>::hasVirtualRoot)
+      .def_rw("id", &PyBasicBlock<nb::numpy>::id)
+      .def_rw("cov", &PyBasicBlock<nb::numpy>::cov)
+      .def_rw("source", &PyBasicBlock<nb::numpy>::source);
+
+  m.def("load_pytorch_dataset", &loadDataset<nb::pytorch>, "path"_a,
+        "undirected"_a = false);
+
+  m.def("load_numpy_dataset", &loadDataset<nb::numpy>, "path"_a,
         "undirected"_a = false);
 }

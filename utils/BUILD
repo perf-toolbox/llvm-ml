@@ -27,6 +27,19 @@ py_binary(
 )
 
 py_binary(
+  name = "mc-dataset-db",
+  srcs = [
+    "dataset-db/mc_dataset_db.py"
+  ],
+  main = "dataset-db/mc_dataset_db.py",
+  deps = [
+    "@llvm-ml-py//:llvm_ml",
+    requirement("tqdm"),
+    requirement("numpy"),
+  ]
+)
+
+py_binary(
   name = "ml-bhive-import",
   srcs = [
     "bhive-import/main.py"
