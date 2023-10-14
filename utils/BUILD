@@ -40,6 +40,19 @@ py_binary(
 )
 
 py_binary(
+  name = "mc-llvm-mca-importer",
+  srcs = [
+    "llvm-mca-importer/main.py"
+  ],
+  main = "llvm-mca-importer/main.py",
+  deps = [
+    "@llvm-ml-py//:llvm_ml",
+    requirement("tqdm"),
+    requirement("numpy"),
+  ]
+)
+
+py_binary(
   name = "ml-bhive-import",
   srcs = [
     "bhive-import/main.py"
