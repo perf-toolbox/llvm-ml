@@ -66,7 +66,7 @@ cc_library(
     includes = ["include"],
     strip_include_prefix = "include",
     deps = [
-        "@python_3_10//:python_headers",
+        "@python_3_11//:python_headers",
         "@robin-map//:robin-map",
     ],
     local_defines = ["NB_BUILD", "NB_SHARED"],

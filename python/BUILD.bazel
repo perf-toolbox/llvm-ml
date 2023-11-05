@@ -1,15 +1,15 @@
 load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
-load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
+# load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
 load("@rules_python//python:defs.bzl", "py_library")
-load("@llvm_ml_py_pip//:requirements.bzl", "requirement")
+load("@pip//:requirements.bzl", "requirement")
 
-compile_pip_requirements_3_10(
-    name = "requirements_3_10",
-    extra_args = ["--allow-unsafe", "--resolver=backtracking"],
-    requirements_in = "requirements.in",
-    requirements_txt = "requirements_lock_3_10.txt",
-    requirements_windows = "requirements_windows_3_10.txt",
-)
+# compile_pip_requirements_3_10(
+#     name = "requirements_3_10",
+#     extra_args = ["--allow-unsafe", "--resolver=backtracking"],
+#     requirements_in = "requirements.in",
+#     requirements_txt = "requirements_lock_3_10.txt",
+#     requirements_windows = "requirements_windows_3_10.txt",
+# )
 
 cc_library(
     name = "py_structures_static",
@@ -17,7 +17,7 @@ cc_library(
         "py_structures.cpp",
     ],
     deps = [
-        "@llvm-ml-libs//:cpp_structures",
+        "@//lib:cpp_structures",
         "@nanobind",
     ],
     linkstatic = True,
@@ -48,13 +48,14 @@ py_library(
     ":py_structures",
     ":_llvm_ml_impl.py"
   ],
+  imports = ["."],
   visibility = ["//visibility:public"],
 )
 
 py_package(
   name = "llvm_ml_pkg",
   deps = [
-    "//:llvm_ml",
+    ":llvm_ml",
   ],
   visibility = ["//visibility:public"]
 )

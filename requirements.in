@@ -7,4 +7,4 @@ protobuf
 pytest
 torch
 torch-geometric
-
+lightning
