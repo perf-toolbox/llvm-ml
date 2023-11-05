@@ -38,7 +38,7 @@ class MCEmbedding(Module):
         return self.norm(output), pos_tensor
 
 
-class MCAttentionHead(nn.Module):
+class MCGraphAttention(nn.Module):
     def __init__(self, in_size, heads=4):
         super().__init__()
 
@@ -79,15 +79,6 @@ class MCAttentionHead(nn.Module):
 
         return self.proj(res)
 
-
-class MCGraphAttention(nn.Module):
-    def __init__(self, in_size, heads=6):
-        super().__init__()
-
-        self.heads = MCAttentionHead(in_size, heads)
-
-    def forward(self, nodes, edge_index, mask=None):
-        return self.heads(nodes, edge_index, mask)
 
 class MCGraphEncoder(Module):
     def __init__(self, emb_size, out_size, num_heads=4, dropout=0.1):
