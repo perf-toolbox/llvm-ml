@@ -33,8 +33,8 @@ cc_library(
       "@llvm-project//llvm:Target",
       "@llvm-project//llvm:OrcJIT",
       "@nlohmann_json//:json",
-      "@llvm-ml-libs//:target",
-      "@llvm-ml-libs//:cpp_structures",
+      "@//lib:target",
+      "@//lib:cpp_structures",
       "//third_party:libpmu",
       "@//third_party:indicators",
       "@range-v3",
@@ -50,7 +50,7 @@ cc_binary(
     deps = [
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
-      "@llvm-ml-libs//:target",
+      "@//lib:target",
     ],
     visibility = [
       "//tests:__pkg__",
@@ -68,8 +68,8 @@ cc_binary(
       "@llvm-project//llvm:AllTargetsAsmParsers",
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
-      "@llvm-ml-libs//:target",
-      "@llvm-ml-libs//:graph",
+      "@//lib:target",
+      "@//lib:graph",
       "@//third_party:indicators",
     ],
     visibility = [
@@ -88,9 +88,9 @@ cc_binary(
       "@llvm-project//llvm:MC",
       "@llvm-project//llvm:Target",
       "@nlohmann_json//:json",
-      "@llvm-ml-libs//:target",
-      "@llvm-ml-libs//:graph",
-      "@llvm-ml-libs//:cpp_structures",
+      "@//lib:target",
+      "@//lib:graph",
+      "@//lib:cpp_structures",
       "@//third_party:indicators",
     ]
 )
@@ -102,8 +102,8 @@ cc_binary(
     ],
     deps = [
         "@llvm-project//llvm:Support",
-        "@llvm-ml-libs//:cpp_structures",
-        "@llvm-ml-libs//:statistics",
+        "@//lib:cpp_structures",
+        "@//lib:statistics",
         "@range-v3",
         "@//third_party:indicators",
     ],

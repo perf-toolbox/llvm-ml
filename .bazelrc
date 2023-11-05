@@ -3,8 +3,8 @@
 # considerably.
 build --force_pic
 
-build --enable_bzlmod
-build --experimental_cc_shared_library
+common --enable_bzlmod
+common --experimental_cc_shared_library
 
 # Build with C++20
 # TODO This currently only works with Clang. Uplift LLVM when a fix for gcc

@@ -1,14 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary")
-load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
 load("@pip//:requirements.bzl", "requirement")
-
-compile_pip_requirements_3_10(
-    name = "requirements_3_10",
-    extra_args = ["--allow-unsafe"],
-    requirements_in = "requirements.in",
-    requirements_txt = "requirements_lock_3_10.txt",
-    requirements_windows = "requirements_windows_3_10.txt",
-)
 
 py_binary(
   name = "mc-dataset-report",
@@ -17,12 +8,26 @@ py_binary(
   ],
   main = "dataset-report/main.py",
   deps = [
-    "@llvm-ml-py//:llvm_ml",
+    "//python:llvm_ml",
     requirement("tqdm"),
     requirement("matplotlib"),
     requirement("networkx"),
     requirement("scikit-learn"),
     requirement("numpy"),
+  ]
+)
+
+py_binary(
+  name = "trainer",
+  srcs = [
+    "nn-trainer/main.py"
+  ],
+  main = "nn-trainer/main.py",
+  deps = [
+    "@//python:llvm_ml",
+    requirement("torch"),
+    requirement("lightning"),
+    requirement("torch_geometric"),
   ]
 )
 
@@ -33,7 +38,7 @@ py_binary(
   ],
   main = "dataset-db/mc_dataset_db.py",
   deps = [
-    "@llvm-ml-py//:llvm_ml",
+    "@//python:llvm_ml",
     requirement("tqdm"),
     requirement("numpy"),
   ]
@@ -46,7 +51,7 @@ py_binary(
   ],
   main = "llvm-mca-importer/main.py",
   deps = [
-    "@llvm-ml-py//:llvm_ml",
+    "@//python:llvm_ml",
     requirement("tqdm"),
     requirement("numpy"),
   ]
@@ -68,7 +73,7 @@ cc_binary(
     deps = [
       "@//tools:llvm-mc-bench-lib",
       "@nlohmann_json//:json",
-      "@llvm-ml-libs//:target",
+      "@//lib:target",
     ],
     visibility = [
       "//tests:__pkg__",
@@ -82,7 +87,7 @@ cc_binary(
       "mc-data-gen/main.cpp",
     ],
     deps = [
-      "@llvm-ml-libs//:cpp_structures",
+      "@//lib:cpp_structures",
       "@llvm-project//llvm:Support",
       "@capnp-cpp//src/capnp",
     ],
