@@ -22,6 +22,31 @@ def to_dense_adj_batch(edge_index, batch, num_nodes=0):
     return adj
 
 
+class MCNNConfig:
+    def __init__(self,
+                 num_opcodes,
+                 batch_size=64,
+                 embedding_size=128,
+                 forward_expansion=4,
+                 reg_forward_expansion=4,
+                 num_heads_encoder=4,
+                 num_heads_decoder=4,
+                 num_encoders=4,
+                 num_decoders=4,
+                 dropout=0.1,
+                 learning_rate=1e-3,
+                 ):
+        self.num_opcodes = num_opcodes
+        self.batch_size = batch_size
+        self.embedding_size = embedding_size
+        self.forward_expansion = forward_expansion
+        self.reg_forward_expansion = reg_forward_expansion
+        self.num_heads_encoder = num_heads_encoder
+        self.num_encoders = num_encoders
+        self.dropout = dropout
+        self.learning_rate = learning_rate
+
+
 class MCEmbedding(Module):
     def __init__(self, num_opcodes, emb_size):
         super().__init__()
@@ -81,7 +106,7 @@ class MCGraphAttention(nn.Module):
 
 
 class MCGraphEncoder(Module):
-    def __init__(self, emb_size, out_size, num_heads=4, dropout=0.1):
+    def __init__(self, emb_size, fwd_exp, num_heads=4, dropout=0.1):
         super().__init__()
 
         self.norm1 = gnn.LayerNorm(emb_size)
@@ -89,56 +114,33 @@ class MCGraphEncoder(Module):
         self.norm2 = gnn.LayerNorm(emb_size)
 
         self.feed_forward = nn.Sequential(
-            nn.Linear(emb_size, 4 * emb_size),
+            nn.Linear(emb_size, fwd_exp * emb_size),
             nn.GELU(),
-            nn.Linear(4 * emb_size, emb_size),
+            nn.Linear(fwd_exp * emb_size, emb_size),
             nn.Dropout(dropout)
         )
 
     def forward(self, nodes, edge_index, mask):
-        nodes = self.norm1(nodes)
         dense_context = self.attention(nodes, edge_index, mask)
+        dense_context = self.norm1(nodes + dense_context)
 
         res = self.feed_forward(dense_context)
 
-        return self.norm2(res)
+        return self.norm2(res + dense_context)
 
 
 class MCBERT(pl.LightningModule):
-    def __init__(self, config):
+    def __init__(self, config: MCNNConfig):
         super().__init__()
-
-        if 'hidden_size' not in config:
-            config['hidden_size'] = 64
-        if 'dropout' not in config:
-            config['dropout'] = 0.1
-        if 'learning_rate' not in config:
-            config['learning_rate'] = 1e-5
-        if 'num_heads' not in config:
-            config['num_heads'] = 4
-        if 'num_encoders' not in config:
-            config['num_encoders'] = 8
 
         self.config = config
 
-        num_opcodes = config['num_opcodes']
-        emb_size = config['embedding_size']
-        num_heads_encoder = config['num_heads_encoder']
-        num_encoders = config['num_encoders']
-        hidden_size = config['hidden_size']
-        dropout = config['dropout']
-
-        self.embedding = MCEmbedding(num_opcodes, emb_size)
+        self.embedding = MCEmbedding(self.config.num_opcodes, self.config.embedding_size)
 
         self.encoders = nn.ModuleList(
-           [MCGraphEncoder(emb_size, hidden_size, num_heads_encoder, dropout) for _ in range(num_encoders)])
+           [MCGraphEncoder(self.config.embedding_size, self.config.forward_expansion, self.config.num_heads_encoder, self.config.dropout) for _ in range(self.config.num_encoders)])
 
-        self.token_prediction = nn.Linear(emb_size, num_opcodes)
-
-        self.proj = nn.Sequential(
-            nn.Linear(emb_size, 4 * emb_size),
-            nn.Linear(4 * emb_size, emb_size)
-        )
+        self.token_prediction = nn.Linear(self.config.embedding_size, self.config.num_opcodes)
 
     def forward(self, nodes, edge_index, batch):
         embedded, pos_enc = self.embedding(nodes)
@@ -167,13 +169,13 @@ class MCBERT(pl.LightningModule):
         log_prefix = "train" if stage == 'train' else "val"
         target_token = dense_x.clone()
 
-        for i in range(self.config['batch_size']):
+        for i in range(self.config.batch_size):
             if mask_id[i] != 0:
                 target_token[i, mask_id[i]] = original_token[i]
 
-        loss = F.cross_entropy(masked_token.view(-1, self.config['num_opcodes']), target_token.view(-1).long())
+        loss = F.cross_entropy(masked_token.view(-1, self.config.num_opcodes), target_token.view(-1).long())
 
-        self.log(f"{log_prefix}_loss", loss, on_epoch=True, batch_size=self.config['batch_size'])
+        self.log(f"{log_prefix}_loss", loss, on_epoch=True, batch_size=self.config.batch_size)
 
         return loss, bb, raw
 
@@ -186,7 +188,7 @@ class MCBERT(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.config['learning_rate'], weight_decay=1e-3)
+        optimizer = Adam(self.parameters(), lr=self.config.learning_rate, weight_decay=1e-3)
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
         return {
             'optimizer': optimizer,
