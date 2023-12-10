@@ -9,4 +9,3 @@ def resolve_path(label):
     For example, package_path("@foo//bar:BUILD") returns 'external/foo/bar'.
     """
     return paths.join(Label(label).workspace_root, Label(label).package)
-

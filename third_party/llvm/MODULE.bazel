@@ -1,4 +1,7 @@
-module(name = "llvm", version = "18.0")
+module(
+    name = "llvm",
+    version = "18.0",
+)
 
 bazel_dep(name = "bazel_skylib", version = "1.4.2")
 bazel_dep(name = "platforms", version = "0.0.6")

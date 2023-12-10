@@ -1,4 +1,5 @@
 load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
+
 # load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
 load("@rules_python//python:defs.bzl", "py_library")
 load("@pip//:requirements.bzl", "requirement")
@@ -16,48 +17,51 @@ cc_library(
     srcs = [
         "py_structures.cpp",
     ],
+    linkstatic = True,
     deps = [
         "@//lib:cpp_structures",
         "@nanobind",
     ],
-    linkstatic = True,
 )
 
 cc_shared_library(
     name = "py_structures",
+    shared_lib_name = select({
+        "@platforms//os:linux": "_llvm_ml_impl.so",
+        "@platforms//os:macos": "_llvm_ml_impl.so",
+        "//conditions:default": "",
+    }),
+    visibility = ["//visibility:public"],
     deps = [
         ":py_structures_static",
     ],
-    shared_lib_name = select({
-      "@platforms//os:linux": "_llvm_ml_impl.so",
-      "@platforms//os:macos": "_llvm_ml_impl.so",
-      "//conditions:default": "",
-    }),
-    visibility = ["//visibility:public"]
 )
 
 py_library(
-  name = "llvm_ml",
-  srcs = glob(["llvm_ml/**/*.py"], allow_empty=False),
-  deps = [
-    requirement("numpy"),
-    requirement("tqdm"),
-    requirement("protobuf"),
-  ],
-  data = [
-    ":py_structures",
-    ":_llvm_ml_impl.py"
-  ],
-  imports = ["."],
-  visibility = ["//visibility:public"],
+    name = "llvm_ml",
+    srcs = glob(
+        ["llvm_ml/**/*.py"],
+        allow_empty = False,
+    ),
+    data = [
+        ":_llvm_ml_impl.py",
+        ":py_structures",
+    ],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+    deps = [
+        requirement("numpy"),
+        requirement("tqdm"),
+        requirement("protobuf"),
+    ],
 )
 
 py_package(
-  name = "llvm_ml_pkg",
-  deps = [
-    ":llvm_ml",
-  ],
-  visibility = ["//visibility:public"]
+    name = "llvm_ml_pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":llvm_ml",
+    ],
 )
 
 exports_files(["pytest_wrapper.py"])

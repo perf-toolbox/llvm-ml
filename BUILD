@@ -9,26 +9,26 @@ load("@rules_wheel//wheel:rules.bzl", "bdist_wheel")
 
 compile_pip_requirements(
     name = "requirements_3_11",
+    extra_args = ["--allow-unsafe"],
     py_binary = py_binary_11,
     py_test = fake_py_test,
-    extra_args = ["--allow-unsafe"],
     requirements_in = "requirements.in",
     requirements_txt = "requirements_lock_3_11.txt",
     requirements_windows = "requirements_windows_3_11.txt",
 )
 
 bdist_wheel(
-  name = "llvm_ml_wheel",
-  wheel_name = "llvm_ml",
-  deps = [
-    "//python:llvm_ml",
-  ],
-  data = [
-    "//python:py_structures"
-  ],
-  include_package_data = True,
-  version = "0.0.1",
-  strip_src_prefix = "python"
+    name = "llvm_ml_wheel",
+    data = [
+        "//python:py_structures",
+    ],
+    include_package_data = True,
+    strip_src_prefix = "python",
+    version = "0.0.1",
+    wheel_name = "llvm_ml",
+    deps = [
+        "//python:llvm_ml",
+    ],
 )
 
 #py_wheel(
@@ -45,7 +45,7 @@ pkg_filegroup(
     name = "tools",
     srcs = [
         "//tools:binary",
-    ]
+    ],
 )
 
 pkg_tar(
@@ -61,5 +61,5 @@ pkg_tar(
 refresh_compile_commands(
     name = "refresh_compile_commands",
     exclude_external_sources = True,
-    exclude_headers = "external"
+    exclude_headers = "external",
 )
