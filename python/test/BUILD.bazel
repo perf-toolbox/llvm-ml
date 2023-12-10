@@ -2,9 +2,9 @@ load("//python:defs.bzl", "pytest_test")
 
 pytest_test(
     name = "utils",
+    size = "small",
     srcs = ["utils.py"],
     deps = [
         "@//python:llvm_ml",
     ],
-    size = "small",
 )

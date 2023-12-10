@@ -1,16 +1,16 @@
 _bdist_wheel_attrs = {
     "deps": attr.label_list(
-      doc = "List of libraries to include in a wheel",
-      mandatory = True,
-      allow_empty = False,
+        doc = "List of libraries to include in a wheel",
+        mandatory = True,
+        allow_empty = False,
     ),
     "data": attr.label_list(
-      doc = "List of additional files to be placed outside any package",
-      mandatory = False,
+        doc = "List of additional files to be placed outside any package",
+        mandatory = False,
     ),
     "strip_src_prefix": attr.string(
-      doc = "TODO",
-      mandatory = False,
+        doc = "TODO",
+        mandatory = False,
     ),
     "wheel_name": attr.string(),
     "version": attr.string(),
@@ -47,8 +47,8 @@ def _generate_setup_py(ctx):
 
     data_files = []
     for d in ctx.attr.data:
-      for src in d.files.to_list():
-        data_files.append(src.basename)
+        for src in d.files.to_list():
+            data_files.append(src.basename)
 
     # create setup.py
     ctx.actions.expand_template(
@@ -74,9 +74,9 @@ def _generate_manifest(ctx, package_name):
     manifest_text = "\n".join([i for i in ctx.attr.manifest]).format(package_name = package_name)
 
     if len(ctx.attr.data) > 0:
-      for d in ctx.attr.data:
-        for f in d.files.to_list():
-          manifest_text += "\ninclude " + f.basename
+        for d in ctx.attr.data:
+            for f in d.files.to_list():
+                manifest_text += "\ninclude " + f.basename
 
     manifest = ctx.actions.declare_file("{}/MANIFEST.in".format(ctx.attr.name))
     ctx.actions.expand_template(
@@ -115,14 +115,14 @@ def _bdist_wheel_impl(ctx):
     for src in source_list:
         relative_path = _remove_prefix(src.dirname, ctx.attr.strip_src_prefix).strip("/")
         if relative_path not in created_dirs:
-          new_dir = ctx.actions.declare_directory(work_dir + "/" + relative_path)
-          source_tree_commands.append("mkdir -p {dir} && chmod 0755 {dir}".format(dir = new_dir.path)) 
-          created_dirs.append(relative_path)
-          source_tree.append(new_dir)
+            new_dir = ctx.actions.declare_directory(work_dir + "/" + relative_path)
+            source_tree_commands.append("mkdir -p {dir} && chmod 0755 {dir}".format(dir = new_dir.path))
+            created_dirs.append(relative_path)
+            source_tree.append(new_dir)
 
         new_path = "/".join([
-          work_dir,
-          _remove_prefix(src.path, ctx.attr.strip_src_prefix).strip("/"),
+            work_dir,
+            _remove_prefix(src.path, ctx.attr.strip_src_prefix).strip("/"),
         ])
 
         new_file = ctx.actions.declare_file(new_path)
@@ -139,11 +139,11 @@ def _bdist_wheel_impl(ctx):
     data_inputs = []
 
     for d in ctx.attr.data:
-      for f in d.files.to_list():
-        data_file = ctx.actions.declare_file(work_dir + "/" + f.basename)
-        source_tree_commands.append("cp {src} {dst}".format(src = f.path, dst = data_file.path))
-        source_tree.append(data_file)
-        data_inputs.append(f)
+        for f in d.files.to_list():
+            data_file = ctx.actions.declare_file(work_dir + "/" + f.basename)
+            source_tree_commands.append("cp {src} {dst}".format(src = f.path, dst = data_file.path))
+            source_tree.append(data_file)
+            data_inputs.append(f)
 
     ctx.actions.run_shell(
         mnemonic = "CreateSourceTree",

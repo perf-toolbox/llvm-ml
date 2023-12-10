@@ -1,4 +1,4 @@
 exports_files([
-  "setup.py.in",
-  "MANIFEST.in"
+    "setup.py.in",
+    "MANIFEST.in",
 ])

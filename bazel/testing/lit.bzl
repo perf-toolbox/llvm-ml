@@ -52,4 +52,3 @@ def glob_lit_tests(driver, data, test_file_exts, exclude = None, **kwargs):
             suites[dir].append(test)
     for suite, tests in suites.items():
         native.test_suite(name = suite, tests = tests)
-

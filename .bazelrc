@@ -3,13 +3,16 @@
 # considerably.
 build --force_pic
 
+build --crosstool_top=@llvm-17//:toolchain
+
 common --enable_bzlmod
 common --experimental_cc_shared_library
 
 # Build with C++20
 # TODO This currently only works with Clang. Uplift LLVM when a fix for gcc
 # lands. 
-build --cxxopt=-std=c++20 --host_cxxopt=-std=c++20
+build --features=c++20
+build --features=static_stdlib
 
 # Disable build of both shared and static libs
 build --dynamic_mode=off
@@ -23,9 +26,6 @@ build --host_per_file_copt=third_party/.*\.(c|cc|cpp|cxx)$@-w
 build --per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
 build --host_per_file_copt=external/.*\.(c|cc|cpp|cxx)$@-w
 
-build:clang --repo_env=CC=clang
-build:clang --repo_env=CXX=clang++
-
 build:debug --strip=never
 build:debug -c dbg
 
@@ -36,11 +36,6 @@ build:ci --config=mold
 build:ci -c fastbuild
 build:ci --disk_cache=./bzl-cache
 build:ci --sandbox_writable_path=/home/runner/.cargo
-
-build:libc++ --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
-build:libc++ --linkopt=-stdlib=libc++ --host_linkopt=-stdlib=libc++
-build:libc++ --linkopt=-l:libc++.a --host_linkopt=-l:libc++.a
-build:libc++ --linkopt=-static-libgcc --host_linkopt=-static-libgcc
 
 test:ci --verbose_failures=true 
 
