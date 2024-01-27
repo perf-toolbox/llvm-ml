@@ -32,10 +32,11 @@ template <typename Target> struct PyBasicBlock {
 
 template <typename Target>
 std::vector<PyBasicBlock<Target>> loadDataset(const std::string &path,
+                                              int startOpcode, int padOpcode,
                                               bool undirected) {
   std::vector<PyBasicBlock<Target>> result;
 
-  const auto reader = [&result,
+  const auto reader = [&result, startOpcode, padOpcode,
                        undirected](llvm_ml::MCDataset::Reader &dataset) {
     result.reserve(dataset.getData().size());
 
@@ -66,8 +67,11 @@ std::vector<PyBasicBlock<Target>> loadDataset(const std::string &path,
         return 2;
       }();
 
-      container->nodes.reserve(graph.getNodes().size());
-      container->edges.reserve(graph.getEdges().size() * edgeScale);
+      size_t padEdges = undirected ? 2 : 1;
+
+      container->nodes.reserve(graph.getNodes().size() + 1);
+      container->edges.reserve((graph.getEdges().size() + padEdges) *
+                               edgeScale);
 
       std::transform(graph.getNodes().begin(), graph.getNodes().end(),
                      std::back_inserter(container->nodes),
@@ -91,8 +95,18 @@ std::vector<PyBasicBlock<Target>> loadDataset(const std::string &path,
         return res;
       }();
 
-      std::array<size_t, 1> nodesShape{graph.getNodes().size()};
-      std::array<size_t, 2> edgesShape{numEdges, 2};
+      container->nodes[0] = startOpcode;
+      container->nodes.push_back(padOpcode);
+      container->edges.push_back(0);
+      container->edges.push_back(container->nodes.size() - 1);
+
+      if (undirected) {
+        container->edges.push_back(container->nodes.size() - 1);
+        container->edges.push_back(0);
+      }
+
+      std::array<size_t, 1> nodesShape{container->nodes.size()};
+      std::array<size_t, 2> edgesShape{numEdges + padEdges, 2};
       bb.nodes = nb::ndarray<Target, int>(container->nodes.data(), 1,
                                           nodesShape.data(), owner);
       bb.edges = nb::ndarray<Target, int>(container->edges.data(), 2,
@@ -130,8 +144,8 @@ NB_MODULE(_llvm_ml_impl, m) {
       .def_rw("source", &PyBasicBlock<nb::numpy>::source);
 
   m.def("load_pytorch_dataset", &loadDataset<nb::pytorch>, "path"_a,
-        "undirected"_a = false);
+        "start_opcode"_a, "pad_opcode"_a, "undirected"_a = false);
 
   m.def("load_numpy_dataset", &loadDataset<nb::numpy>, "path"_a,
-        "undirected"_a = false);
+        "start_opcode"_a, "pad_opcode"_a, "undirected"_a = false);
 }

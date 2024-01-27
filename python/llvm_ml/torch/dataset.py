@@ -5,12 +5,16 @@ import torch
 import random
 
 class BasicBlockDataset(Dataset):
-    def __init__(self, dataset_path, step="0.05", prefilter=True, masked=False, banned_ids=[]):
+    def __init__(self, dataset_path, opcodes, step="0.05", prefilter=True, masked=False, banned_ids=[]):
         super().__init__(None, None, None)
-        basic_blocks = load_pytorch_dataset(dataset_path, True)
 
-        self.num_opcodes = 21000 + 2
-        self.mask_opcode = 21001
+        self.num_opcodes = len(opcodes) + 4
+        self.mask_opcode = len(opcodes)
+        # FIXME: figure out how to add a pad opcode
+        self.pad_opcode = len(opcodes) + 1
+        self.start_opcode = len(opcodes) + 2
+
+        self.opcodes = opcodes
 
         self.masked = masked
 
@@ -18,6 +22,8 @@ class BasicBlockDataset(Dataset):
         self.basic_blocks = []
         self.original_opcodes = []
         self.masked_ids = []
+
+        basic_blocks = load_pytorch_dataset(dataset_path, self.start_opcode, self.pad_opcode, True)
 
         for bb in basic_blocks:
             if prefilter:
@@ -36,14 +42,13 @@ class BasicBlockDataset(Dataset):
             y = bb.measured_cycles
 
             if masked:
-                if len(bb.nodes) > 4:
+                if len(bb.nodes) > 8:
                     masked_id = random.randint(2, len(bb.nodes) - 2)
                     self.original_opcodes.append(bb.nodes[masked_id].clone().detach())
                     bb.nodes[masked_id] = self.mask_opcode
                     self.masked_ids.append(torch.tensor(masked_id))
                 else:
-                    self.original_opcodes.append(torch.tensor(0, dtype=int))
-                    self.masked_ids.append(torch.tensor(0, dtype=int))
+                    continue
 
             if step is not None:
                 y = floor_step(y, step)
@@ -75,3 +80,13 @@ class BasicBlockDataset(Dataset):
             original = self.original_opcodes[index]
 
         return x, y, mask_id, original
+
+    def to_string(self, opcode: int):
+        if opcode == len(self.opcodes):
+            return "<MASK>"
+        elif opcode == len(self.opcodes) + 1:
+            return "<PAD>"
+        elif opcode == len(self.opcodes) + 2:
+            return "<START>"
+        else:
+            return self.opcodes[opcode]

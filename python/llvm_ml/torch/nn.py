@@ -4,10 +4,11 @@ import torch_geometric.nn as gnn
 from torch_geometric.utils import to_dense_batch, to_dense_adj, scatter
 import torch.nn.functional as F
 import torchmetrics
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.nn import Module
 from torch.optim import lr_scheduler
 import torch
+from transformers import get_linear_schedule_with_warmup
 
 
 def to_dense_adj_batch(edge_index, batch, num_nodes=0):
@@ -35,8 +36,14 @@ class MCNNConfig:
                  num_decoders=4,
                  dropout=0.1,
                  learning_rate=1e-3,
+                 weight_decay=0.01,
+                 warmup_steps=None,
+                 total_steps=None,
+                 class_weight=None,
                  ):
         self.num_opcodes = num_opcodes
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
         self.batch_size = batch_size
         self.embedding_size = embedding_size
         self.forward_expansion = forward_expansion
@@ -45,6 +52,8 @@ class MCNNConfig:
         self.num_encoders = num_encoders
         self.dropout = dropout
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.class_weight = class_weight
 
 
 class MCEmbedding(Module):
@@ -147,7 +156,7 @@ class MCBERT(pl.LightningModule):
 
         encoded, mask = to_dense_batch(embedded, batch)
 
-        # TODO this does not do what I expected
+        # FIXME this is supposed to generate a dense adjacency matrix for my inputs, not sure if it does
         dense_edges = to_dense_adj(edge_index, batch)
         dense_edges = dense_edges.view(encoded.shape[0], encoded.shape[1], encoded.shape[1])
 
@@ -173,7 +182,7 @@ class MCBERT(pl.LightningModule):
             if mask_id[i] != 0:
                 target_token[i, mask_id[i]] = original_token[i]
 
-        loss = F.cross_entropy(masked_token.view(-1, self.config.num_opcodes), target_token.view(-1).long())
+        loss = F.cross_entropy(masked_token.view(-1, self.config.num_opcodes), target_token.view(-1).long(), weight=self.config.class_weight, ignore_index=0)
 
         self.log(f"{log_prefix}_loss", loss, on_epoch=True, batch_size=self.config.batch_size)
 
@@ -188,13 +197,19 @@ class MCBERT(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.config.learning_rate, weight_decay=1e-3)
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
+        optimizer = AdamW(self.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay)
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=self.config.warmup_steps,
+            num_training_steps=self.config.total_steps
+        )
+
         return {
             'optimizer': optimizer,
             'lr_scheduler': {
                 'scheduler': scheduler,
-                'monitor': 'val_loss',
+                'interval': 'step',
+                'frequency': 1,
             }
         }
 
