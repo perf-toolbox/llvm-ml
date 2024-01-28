@@ -212,4 +212,3 @@ class MCBERT(pl.LightningModule):
                 'frequency': 1,
             }
         }
-
