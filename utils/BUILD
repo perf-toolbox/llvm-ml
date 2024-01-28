@@ -96,3 +96,20 @@ cc_binary(
         "@llvm-project//llvm:Support",
     ],
 )
+
+cc_binary(
+    name = "unpacker",
+    srcs = [
+        "unpacker/unpacker.cpp",
+    ],
+    visibility = [
+        "//tests:__pkg__",
+        "//tests:__subpackages__",
+    ],
+    deps = [
+        "@//lib:cpp_structures",
+        "@capnp-cpp//src/capnp",
+        "@llvm-project//llvm:Support",
+        "@//third_party:indicators",
+    ],
+)
