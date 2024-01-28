@@ -115,6 +115,23 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "llvm-mc-tokengen",
+    srcs = [
+        "llvm-mc-tokengen/llvm-mc-tokengen.cpp",
+    ],
+    visibility = [
+        "//tests:__pkg__",
+    ],
+    deps = [
+        "@llvm-project//llvm:AllTargetsAsmParsers",
+        "@llvm-project//llvm:AllTargetsDisassemblers",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:Target",
+    ],
+)
+
 pkg_files(
     name = "binary",
     srcs = [

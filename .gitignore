@@ -4,3 +4,4 @@ user.bazelrc
 compile_commands.json
 .DS_Store
 MODULE.bazel.lock
+.vscode
