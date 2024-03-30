@@ -133,6 +133,14 @@ static void exportBinary(const llvm_ml::Graph &g, std::filesystem::path path) {
     bEdge.setTo(std::get<1>(e.value()));
     bEdge.setIsDataDependency(
         std::get<llvm_ml::EdgeFeatures>(e.value()).isData);
+    bEdge.setIsImplicit(
+        std::get<llvm_ml::EdgeFeatures>(e.value()).isImplicit);
+    bEdge.setIsPredicate(
+        std::get<llvm_ml::EdgeFeatures>(e.value()).isPredicate);
+    bEdge.setIsVector(
+        std::get<llvm_ml::EdgeFeatures>(e.value()).isVector);
+    bEdge.setIsTile(
+        std::get<llvm_ml::EdgeFeatures>(e.value()).isTile);
   }
 
   llvm_ml::writeToFile(path, message);

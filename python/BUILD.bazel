@@ -1,8 +1,6 @@
-load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
-
-# load("@python_versions//3.10:defs.bzl", compile_pip_requirements_3_10 = "compile_pip_requirements")
-load("@rules_python//python:defs.bzl", "py_library")
 load("@pip//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:packaging.bzl", "py_package")
 
 # compile_pip_requirements_3_10(
 #     name = "requirements_3_10",

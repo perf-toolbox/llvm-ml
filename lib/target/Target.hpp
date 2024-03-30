@@ -63,6 +63,10 @@ public:
   virtual bool isSyscall(const llvm::MCInst &inst) = 0;
   virtual bool isVarLatency(const llvm::MCInst &inst) = 0;
 
+  virtual bool isImplicitReg(const llvm::MCInst &, unsigned reg) = 0;
+  virtual bool isVectorReg(unsigned reg) = 0;
+  virtual bool isTileReg(unsigned reg) = 0;
+
   virtual std::unique_ptr<InlineAsmBuilder> createInlineAsmBuilder() = 0;
 };
 

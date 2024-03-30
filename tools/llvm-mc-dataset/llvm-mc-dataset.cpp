@@ -73,7 +73,20 @@ void deduplicate(measured_pairs_t &measuredPairs) {
   size_t curIndex = 0;
 
   while (curIndex < lastIndex) {
+    if (std::get<1>(measuredPairs[curIndex]).get() == nullptr) {
+      std::swap(measuredPairs[curIndex], measuredPairs[lastIndex]);
+      lastIndex -= 1;
+      curIndex += 1;
+      bar.tick();
+      continue;
+    }
     for (size_t j = curIndex + 1; j < lastIndex; j++) {
+      if (std::get<1>(measuredPairs[j]).get() == nullptr) {
+        std::swap(measuredPairs[j], measuredPairs[lastIndex]);
+        lastIndex -= 1;
+        continue;
+      }
+
       if (*std::get<1>(measuredPairs[curIndex]) !=
           *std::get<1>(measuredPairs[j]))
         continue;

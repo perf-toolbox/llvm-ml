@@ -237,6 +237,22 @@ public:
     return writeRegs;
   }
 
+  bool isImplicitReg(const llvm::MCInst &inst, unsigned reg) override {
+    auto pred = [reg](unsigned other) { return other == reg; };
+
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+
+    return llvm::any_of(desc.implicit_uses(), pred) || llvm::any_of(desc.implicit_defs(), pred);
+  }
+
+  bool isVectorReg(unsigned reg) override {
+    return (reg >= llvm::X86::XMM0 && reg <= llvm::X86::ZMM31);
+  }
+
+  bool isTileReg(unsigned reg) override {
+    return (reg >= llvm::X86::TMM0 && reg <= llvm::X86::TMM7);
+  }
+
   bool isMemLoad(const llvm::MCInst &inst) override {
     const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
     return desc.mayLoad();

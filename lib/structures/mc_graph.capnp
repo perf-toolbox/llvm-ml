@@ -20,6 +20,10 @@ struct MCEdge {
   from @0 : UInt16;
   to @1 : UInt16;
   isDataDependency @2 : Bool;
+  isImplicit @3 : Bool;
+  isPredicate @4 : Bool;
+  isVector @5 : Bool;
+  isTile @6 : Bool;
 }
 
 struct MCGraph {

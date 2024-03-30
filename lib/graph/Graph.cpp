@@ -48,19 +48,19 @@ llvm_ml::Graph llvm_ml::convertMCInstructionsToGraph(
 
   for (size_t i = 0; i < instructions.size(); i++) {
     auto readRegs = mlTarget.getReadRegisters(instructions[i]);
-    auto writeRegs = mlTarget.getReadRegisters(instructions[i]);
+    auto writeRegs = mlTarget.getWriteRegisters(instructions[i]);
 
     for (unsigned reg : readRegs) {
-      size_t offset = static_cast<size_t>(addVirtualRoot == true);
+      size_t offset = addVirtualRoot == true ? 1 : 0;
+      EdgeFeatures ef;
+      ef.isData = true;
+      ef.isImplicit = mlTarget.isImplicitReg(instructions[i], reg);
+      ef.isVector = mlTarget.isVectorReg(reg);
+      ef.isTile = mlTarget.isTileReg(reg);
+      
       if (lastWrite.count(reg)) {
-        EdgeFeatures ef;
-        ef.isData = true;
         graph.addEdge(lastWrite.at(reg) + offset, i + offset, ef);
-      }
-
-      if (writeRegs.count(reg)) {
-        EdgeFeatures ef;
-        ef.isData = true;
+      } else if (writeRegs.count(reg)) {
         graph.addEdge(i + offset, i + offset, ef);
       }
     }
