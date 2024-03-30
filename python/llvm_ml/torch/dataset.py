@@ -5,7 +5,7 @@ import torch
 import random
 
 class BasicBlockDataset(Dataset):
-    def __init__(self, dataset_path, opcodes, step="0.05", prefilter=True, masked=False, banned_ids=[]):
+    def __init__(self, dataset_path, opcodes, step="0.05", min_nodes=0, prefilter=True, banned_ids=[]):
         super().__init__(None, None, None)
 
         self.num_opcodes = len(opcodes) + 4
@@ -16,14 +16,10 @@ class BasicBlockDataset(Dataset):
 
         self.opcodes = opcodes
 
-        self.masked = masked
-
         self.data = []
         self.basic_blocks = []
-        self.original_opcodes = []
-        self.masked_ids = []
 
-        basic_blocks = load_pytorch_dataset(dataset_path, self.start_opcode, self.pad_opcode, True)
+        basic_blocks = load_pytorch_dataset(dataset_path, self.start_opcode, self.pad_opcode)
 
         for bb in basic_blocks:
             if prefilter:
@@ -39,21 +35,15 @@ class BasicBlockDataset(Dataset):
             if bb.id in banned_ids:
                 continue
 
-            y = bb.measured_cycles
+            if len(bb.nodes) < min_nodes:
+                continue
 
-            if masked:
-                if len(bb.nodes) > 8:
-                    masked_id = random.randint(2, len(bb.nodes) - 2)
-                    self.original_opcodes.append(bb.nodes[masked_id].clone().detach())
-                    bb.nodes[masked_id] = self.mask_opcode
-                    self.masked_ids.append(torch.tensor(masked_id))
-                else:
-                    continue
+            y = bb.measured_cycles
 
             if step is not None:
                 y = floor_step(y, step)
 
-            self.data.append(Data(x=bb.nodes, edge_index=torch.transpose(bb.edges, 0, 1).contiguous(), y=torch.tensor(y)))
+            self.data.append(Data(x=bb.nodes, edge_index=torch.transpose(bb.edges, 0, 1).contiguous(), edge_attr=bb.features, y=torch.tensor(y)))
             self.basic_blocks.append({
                 'source': bb.source,
                 'id': bb.id,
@@ -72,21 +62,22 @@ class BasicBlockDataset(Dataset):
         x = self.data[index]
         y = self.basic_blocks[index]
 
-        mask_id = torch.tensor(0)
-        original = torch.tensor(0)
+        return x, y
 
-        if self.masked:
-            mask_id = self.masked_ids[index]
-            original = self.original_opcodes[index]
+    def get_mask_opcode(self):
+        return self.mask_opcode
 
-        return x, y, mask_id, original
+    def get_pad_opcode(self):
+        return self.pad_opcode
 
     def to_string(self, opcode: int):
-        if opcode == len(self.opcodes):
+        if opcode == self.mask_opcode:
             return "<MASK>"
-        elif opcode == len(self.opcodes) + 1:
+        elif opcode == self.pad_opcode:
             return "<PAD>"
-        elif opcode == len(self.opcodes) + 2:
+        elif opcode == self.start_opcode:
             return "<START>"
+        elif opcode >= self.num_opcodes:
+            return "<UNK>"
         else:
             return self.opcodes[opcode]

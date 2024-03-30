@@ -9,6 +9,7 @@ from torch.nn import Module
 from torch.optim import lr_scheduler
 import torch
 from transformers import get_linear_schedule_with_warmup
+from dataclasses import dataclass
 
 
 def to_dense_adj_batch(edge_index, batch, num_nodes=0):
@@ -23,6 +24,7 @@ def to_dense_adj_batch(edge_index, batch, num_nodes=0):
     return adj
 
 
+@dataclass
 class MCNNConfig:
     def __init__(self,
                  num_opcodes,

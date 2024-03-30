@@ -31,6 +31,11 @@ struct NodeFeatures {
 
 struct EdgeFeatures {
   bool isData = false;
+  bool isWrite = false;
+  bool isImplicit = false;
+  bool isPredicate = false;
+  bool isVector = false;
+  bool isTile = false;
 };
 
 struct Graph {
