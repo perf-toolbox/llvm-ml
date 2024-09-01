@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "llvm-ml/structures/structures.hpp"
+// #include "llvm-ml/structures/structures.hpp"
+#include "structures.hpp"
 
 #include "capnp/message.h"
 #include "capnp/serialize-packed.h"
