@@ -30,3 +30,4 @@ message(STATUS "Include directory: ${LLVM_INCLUDE_DIRS}")
 
 add_subdirectory(lib/structures)
 add_subdirectory(lib/target)
+add_subdirectory(tools)

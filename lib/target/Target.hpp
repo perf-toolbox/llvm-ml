@@ -74,6 +74,7 @@ std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,
                                          llvm::MCInstrInfo *mcii);
 
 std::unique_ptr<MLTarget> createX86MLTarget(llvm::MCInstrInfo *mcii);
+std::unique_ptr<MLTarget> createRISCVMLTarget(llvm::MCInstrInfo *mcii);
 
 llvm::Expected<std::vector<llvm::MCInst>>
 parseAssembly(llvm::SourceMgr &srcMgr, const llvm::MCInstrInfo &mcii,

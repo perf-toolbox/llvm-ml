@@ -4,7 +4,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "BenchmarkResult.hpp"
-#include "llvm-ml/structures/structures.hpp"
+// #include "llvm-ml/structures/structures.hpp"
+#include "structures.hpp"
 
 #include <capnp/message.h>
 #include <nlohmann/json.hpp>
