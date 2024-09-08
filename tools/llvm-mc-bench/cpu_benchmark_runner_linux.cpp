@@ -37,7 +37,7 @@
 constexpr unsigned MAX_FAULTS = 30;
 constexpr uint64_t kTimeSliceNS = 1'000'000;
 
-#ifdef __riscv64__
+#ifdef __riscv__
 inline constexpr size_t PAGE_SIZE = 4096;
 #endif
 
@@ -264,7 +264,7 @@ static std::pair<void *, void *> getSegfaultAddr(int child) {
   void *pageFaultAddress = siginfo.si_addr;
 #if defined(__amd64__)
   void *signaledInstruction = (void *)regs.rip;
-#elif defined(__riscv64__)
+#elif defined(__riscv__)
   void *signaledInstruction = (void *)regs.epc;
 #else
 #error "Unsupported platform"
