@@ -4,7 +4,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm-ml/target/Target.hpp"
-#include "Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
