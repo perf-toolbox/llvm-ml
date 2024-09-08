@@ -1,3 +1,8 @@
+if (APPLE)
+  set(RUNNER "llvm-mc-bench/cpu_benchmark_runner_macos.cpp")
+else()
+  set(RUNNER "llvm-mc-bench/cpu_benchmark_runner_linux.cpp")
+endif()
 add_llvm_library(llvm_mc_bench_lib
         "llvm-mc-bench/BenchmarkGenerator.cpp"
         "llvm-mc-bench/BenchmarkGenerator.hpp"
@@ -6,7 +11,7 @@ add_llvm_library(llvm_mc_bench_lib
         "llvm-mc-bench/BenchmarkRunner.hpp"
         "llvm-mc-bench/counters.cpp"
         "llvm-mc-bench/counters.hpp"
-        "llvm-mc-bench/cpu_benchmark_runner_macos.cpp"
+        ${RUNNER} 
   LINK_COMPONENTS
   MC
   OrcJIT
