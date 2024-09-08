@@ -37,6 +37,10 @@
 constexpr unsigned MAX_FAULTS = 30;
 constexpr uint64_t kTimeSliceNS = 1'000'000;
 
+#ifdef __riscv64__
+inline constexpr size_t PAGE_SIZE = 4096;
+#endif
+
 using namespace llvm_ml;
 
 namespace {
