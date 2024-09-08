@@ -145,21 +145,6 @@ public:
   void createSaveState(llvm::IRBuilderBase &builder) override {
     llvm::Type *i32ty = llvm::Type::getInt32Ty(builder.getContext());
     llvm::Type *ptr = i32ty->getPointerTo();
-    auto alloca = builder.CreateAlloca(ptr);
-    // constexpr unsigned defaultValue = 0x1f80;
-    // constexpr unsigned flushToZero = 0x8000;
-    // constexpr unsigned underflowMask = 0x0800;
-    // constexpr unsigned overflowMask = 0x0400;
-    // constexpr unsigned denormalsAreZeros = 0x0040;
-    // constexpr unsigned divideByZeroMask = 0x0200;
-    // auto val = llvm::ConstantInt::get(
-    //     i32ty, defaultValue & flushToZero & !underflowMask & !overflowMask &
-    //                denormalsAreZeros & !divideByZeroMask);
-    // builder.CreateStore(val, alloca);
-    //
-    // builder.CreateIntrinsic(builder.getVoidTy(),
-    //                         llvm::Intrinsic::x86_sse_ldmxcsr, {alloca});
-    //
     auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
     auto asmCallee = llvm::InlineAsm::get(voidFuncTy, SaveState,
                                           "~{dirflag},~{fpsr},~{flags}", true);
@@ -171,16 +156,6 @@ public:
     auto asmCallee = llvm::InlineAsm::get(voidFuncTy, RestoreState,
                                           "~{dirflag},~{fpsr},~{flags}", true);
     builder.CreateCall(asmCallee);
-
-    // constexpr unsigned defaultValue = 0x1f80;
-    // llvm::Type *i32ty = llvm::Type::getInt32Ty(builder.getContext());
-    // llvm::Type *ptr = i32ty->getPointerTo();
-    // auto alloca = builder.CreateAlloca(ptr);
-    // auto val = llvm::ConstantInt::get(i32ty, defaultValue);
-    // builder.CreateStore(val, alloca);
-
-    // builder.CreateIntrinsic(builder.getVoidTy(),
-    //                         llvm::Intrinsic::x86_sse_ldmxcsr, {alloca});
   }
 
   void createBranch(llvm::IRBuilderBase &builder,
