@@ -5,12 +5,9 @@
 
 #pragma once
 
-// #include "llvm-ml/structures/mc_dataset.capnp.h"
-// #include "llvm-ml/structures/mc_graph.capnp.h"
-// #include "llvm-ml/structures/mc_metrics.capnp.h"
-#include "mc_dataset.capnp.h"
-#include "mc_graph.capnp.h"
-#include "mc_metrics.capnp.h"
+#include "llvm-ml/structures/mc_dataset.capnp.h"
+#include "llvm-ml/structures/mc_graph.capnp.h"
+#include "llvm-ml/structures/mc_metrics.capnp.h"
 
 #include "capnp/message.h"
 

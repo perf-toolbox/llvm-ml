@@ -5,6 +5,7 @@ def _init_llvm_impl(_ctx):
         name = "llvm-project",
         targets = [
             "AArch64",
+            "RISCV",
             "X86",
         ],
     )

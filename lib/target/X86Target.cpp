@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "Target.hpp"
+#include "llvm-ml/target/Target.hpp"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
@@ -243,6 +243,11 @@ public:
     const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
 
     return llvm::any_of(desc.implicit_uses(), pred) || llvm::any_of(desc.implicit_defs(), pred);
+  }
+
+  bool isCall(const llvm::MCInst &inst) override {
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+    return desc.isCall();
   }
 
   bool isVectorReg(unsigned reg) override {

@@ -22,11 +22,6 @@ target_link_libraries(llvm_mc_bench_lib PUBLIC
         "pmu"
         "cpp_structures"
         "target"
-        # "LLVMAllTargetsAsmParsers"
-        # "LLVMMC"
-        # "LLVMOrcJIT"
-        # "LLVMSupport"
-        # "LLVMTarget"
         "nlohmann_json"
         "range-v3"
 )

@@ -67,6 +67,16 @@ static cl::opt<std::string>
     TripleName("triple", cl::desc("Target triple to assemble for, "
                                   "see -version for available targets"));
 
+static cl::opt<std::string>
+    MCPU("mcpu",
+         cl::desc("Target a specific cpu type (-mcpu=help for details)"),
+         cl::value_desc("cpu-name"), cl::init(""));
+
+static cl::list<std::string>
+    MAttrs("mattr", cl::CommaSeparated,
+           cl::desc("Target specific attributes (-mattr=help for details)"),
+           cl::value_desc("a1,+a2,-a3,..."));
+
 static cl::opt<bool> Postprocess(
     "postprocess",
     cl::desc(
@@ -112,11 +122,14 @@ static const Target *getTarget(const object::ObjectFile *Obj) {
 
 static void extractBasicBlocks(const object::ObjectFile &object,
                                const Target *target, Triple triple) {
-  std::string cpu = object.tryGetCPUName().value_or("").str();
+  std::string cpu = object.tryGetCPUName().value_or(MCPU).str();
   Expected<SubtargetFeatures> featuresOrError = object.getFeatures();
   if (!featuresOrError)
     std::terminate();
   SubtargetFeatures features = *featuresOrError;
+
+  for (unsigned i = 0; i != MAttrs.size(); ++i)
+    features.AddFeature(MAttrs[i]);
 
   const MCTargetOptions options;
   std::unique_ptr<MCRegisterInfo> mcri(
@@ -151,7 +164,8 @@ static void extractBasicBlocks(const object::ObjectFile &object,
 
   const auto isBlockTerminator = [&](const MCInst &inst) {
     const MCInstrDesc &desc = mcii->get(inst.getOpcode());
-    return desc.isTerminator() || desc.isCall() || mlTarget->isSyscall(inst);
+    return desc.isTerminator() || mlTarget->isSyscall(inst) ||
+           mlTarget->isCall(inst);
   };
 
   uint64_t blockCounter = 0;

@@ -33,6 +33,7 @@ cc_library(
     srcs = [
         "target/Target.cpp",
         "target/X86Target.cpp",
+        "target/RISCVTarget.cpp",
     ],
     hdrs = [
         "target/Target.hpp",
@@ -47,6 +48,8 @@ cc_library(
         "@llvm-project//llvm:Target",
         "@llvm-project//llvm:X86CommonTableGen",
         "@llvm-project//llvm:X86UtilsAndDesc",
+        "@llvm-project//llvm:RISCVCommonTableGen",
+        "@llvm-project//llvm:RISCVUtilsAndDesc",
     ],
 )
 

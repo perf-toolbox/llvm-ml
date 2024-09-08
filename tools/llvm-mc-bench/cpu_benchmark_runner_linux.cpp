@@ -260,6 +260,8 @@ static std::pair<void *, void *> getSegfaultAddr(int child) {
   void *pageFaultAddress = siginfo.si_addr;
 #if defined(__amd64__)
   void *signaledInstruction = (void *)regs.rip;
+#elif defined(__riscv64__)
+  void *signaledInstruction = (void *)regs.epc;
 #else
 #error "Unsupported platform"
 #endif

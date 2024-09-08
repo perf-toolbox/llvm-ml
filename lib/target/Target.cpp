@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "llvm-ml/target/Target.hpp"
 #include "Target.hpp"
 
 #include "llvm/MC/MCAsmBackend.h"
@@ -29,6 +30,8 @@ std::unique_ptr<MLTarget> createMLTarget(const llvm::Triple &triple,
                                          llvm::MCInstrInfo *mcii) {
   if (triple.getArchName() == "x86_64") {
     return createX86MLTarget(mcii);
+  } else if (triple.getArchName() == "riscv64") {
+    return createRISCVMLTarget(mcii);
   }
 
   llvm_unreachable("Unsupported target");

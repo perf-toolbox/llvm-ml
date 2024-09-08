@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
+#include "llvm-ml/target/Target.hpp"
+
 #include "BenchmarkGenerator.hpp"
 #include "BenchmarkResult.hpp"
 #include "BenchmarkRunner.hpp"
 #include "counters.hpp"
-#include "Target.hpp"
-// #include "llvm-ml/target/Target.hpp"
+#include "llvm-ml/target/Target.hpp"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"

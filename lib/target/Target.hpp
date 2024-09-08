@@ -48,6 +48,7 @@ public:
   virtual std::set<unsigned> getReadRegisters(const llvm::MCInst &) = 0;
   virtual std::set<unsigned> getWriteRegisters(const llvm::MCInst &) = 0;
 
+  virtual bool isCall(const llvm::MCInst &inst) = 0;
   virtual bool isMemLoad(const llvm::MCInst &inst) = 0;
   virtual bool isMemStore(const llvm::MCInst &inst) = 0;
   virtual bool isBarrier(const llvm::MCInst &inst) = 0;

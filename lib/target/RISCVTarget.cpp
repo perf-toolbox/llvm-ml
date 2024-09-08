@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
-#include "Target.hpp"
+#include "llvm-ml/target/Target.hpp"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
-// #include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -18,104 +17,111 @@
 #include "MCTargetDesc/RISCVBaseInfo.h"
 
 constexpr auto SaveState = R"(
-  push %rax
-  push %rbx
-  push %rcx
-  push %rdx
-  push %rsi
-  push %rdi
-  push %r8
-  push %r9
-  push %r10
-  push %r11
-  push %r12
-  push %r13
-  push %r14
-  push %r15
-
-  movq $$0xFFFFFFFFFFFFFFFF, %rax
-  movq $$0xFFFFFFFFFFFFFFFF, %rdx
-  xsave64 0x2323000
-
-  vzeroall
-
-  add $$-128, %rsp
-  pushf
-  orl $$0x40000, (%rsp)
-  popf
-  sub $$-128, %rsp
+  sd x1, 72(sp)
+  sd x2, 80(sp)
+  sd x3, 88(sp)
+  sd x4, 96(sp)
+  sd x5, 104(sp)
+  sd x6, 112(sp)
+  sd x7, 120(sp)
+  sd x8, 128(sp)
+  sd x9, 136(sp)
+  sd x10, 144(sp)
+  sd x11, 152(sp)
+  sd x12, 160(sp)
+  sd x13, 168(sp)
+  sd x14, 176(sp)
+  sd x15, 184(sp)
+  sd x16, 192(sp)
+  sd x17, 200(sp)
+  sd x18, 208(sp)
+  sd x19, 216(sp)
+  sd x20, 224(sp)
+  sd x21, 232(sp)
+  sd x22, 240(sp)
+  sd x23, 248(sp)
+  sd x24, 256(sp)
+  sd x25, 264(sp)
+  sd x26, 272(sp)
+  sd x27, 280(sp)
+  sd x29, 288(sp)
+  sd x30, 296(sp)
+  sd x31, 304(sp)
 )";
 
 constexpr auto RestoreState = R"(
-  movq $$0xFFFFFFFFFFFFFFFF, %rax
-  movq $$0xFFFFFFFFFFFFFFFF, %rdx
-  xrstor64 0x2323000
-
-  pop %r15
-  pop %r14
-  pop %r13
-  pop %r12
-  pop %r11
-  pop %r10
-  pop %r9
-  pop %r8
-  pop %rdi
-  pop %rsi
-  pop %rdx
-  pop %rcx
-  pop %rbx
-  pop %rax
+  ld x1, 72(sp)
+  ld x2, 80(sp)
+  ld x3, 88(sp)
+  ld x4, 96(sp)
+  ld x5, 104(sp)
+  ld x6, 112(sp)
+  ld x7, 120(sp)
+  ld x8, 128(sp)
+  ld x9, 136(sp)
+  ld x10, 144(sp)
+  ld x11, 152(sp)
+  ld x12, 160(sp)
+  ld x13, 168(sp)
+  ld x14, 176(sp)
+  ld x15, 184(sp)
+  ld x16, 192(sp)
+  ld x17, 200(sp)
+  ld x18, 208(sp)
+  ld x19, 216(sp)
+  ld x20, 224(sp)
+  ld x21, 232(sp)
+  ld x22, 240(sp)
+  ld x23, 248(sp)
+  ld x24, 256(sp)
+  ld x25, 264(sp)
+  ld x26, 272(sp)
+  ld x27, 280(sp)
+  ld x29, 288(sp)
+  ld x30, 296(sp)
+  ld x31, 304(sp)
 )";
 
-constexpr auto PrologueX64 = R"(
-  movq %rbp, %rax
-  movq $$0x2325000, %rbx
-  movq %rax, (%rbx)
+constexpr auto Prologue = R"(
+  li x1, 0x2325000
+  sd sp, 0(x1)
 
-  movq %rsp, %rax
-  movq %rax, 16(%rbx)
-
-  movq $$512, %rdi
-  movq $$0x2324000, %rbx
-  shr $$12, %rbx
-  shl $$12, %rbx
-
-  movq %rax, %rbp
-  add $$2048, %rbp
-  mov %rbp, %rsp
-  shr $$5, %rsp
-  shl $$5, %rsp
-  sub $$0x10, %rsp
-
-  movq $$0x2324000, %rax 
-  movq $$0x2324000, %rbx  
-  movq $$0x2324000, %rcx 
-  movq $$0x2324000, %rdx 
-  movq $$0x2324000, %rsi 
-  movq $$0x2324000, %rdi 
-  movq $$0x2324000, %r8  
-  movq $$0x2324000, %r9  
-  movq $$0x2324000, %r10 
-  movq $$0x2324000, %r11 
-  movq $$0x2324000, %r12 
-  movq $$0x2324000, %r13 
-  movq $$0x2324000, %r14 
-  movq $$0x2324000, %r15 
+  li x1, 0x2324000
+  mv x2, x1
+  mv x3, x1
+  mv x4, x1
+  mv x5, x1
+  mv x6, x1
+  mv x7, x1
+  mv x8, x1
+  mv x9, x1
+  mv x10, x1
+  mv x11, x1
+  mv x12, x1
+  mv x13, x1
+  mv x14, x1
+  mv x15, x1
+  mv x16, x1
+  mv x17, x1
+  mv x18, x1
+  mv x19, x1
+  mv x20, x1
+  mv x21, x1
+  mv x22, x1
+  mv x23, x1
+  mv x24, x1
+  mv x25, x1
+  mv x26, x1
+  mv x27, x1
+  mv x28, x1
+  mv x29, x1
+  mv x30, x1
+  mv x31, x1
 )";
 
 constexpr auto Epilogue = R"(
-  add $$-128, %rsp
-  pushf
-  andl $$0xFFFFFFFFFFFBFFFF, (%rsp)
-  popf
-  sub $$-128, %rsp
-
-  movq $$0x2325000, %rbx
-  movq (%rbx), %rax
-  movq %rax, %rbp
-
-  movq 16(%rbx), %rax
-  movq %rax, %rsp
+  li x1, 0x2325
+  ld sp, 0(x1)
 )";
 
 namespace {
@@ -124,7 +130,7 @@ public:
   void createSetupEnv(llvm::IRBuilderBase &builder) override {
     auto voidFuncTy = llvm::FunctionType::get(builder.getVoidTy(), false);
 
-    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, PrologueX64,
+    auto asmCallee = llvm::InlineAsm::get(voidFuncTy, Prologue,
                                           "~{dirflag},~{fpsr},~{flags}", true);
     builder.CreateCall(asmCallee);
   }
@@ -251,6 +257,12 @@ public:
 
   bool isTileReg(unsigned reg) override {
     return false;
+  }
+
+  bool isCall(const llvm::MCInst &inst) override {
+    const llvm::MCInstrDesc &desc = mII->get(inst.getOpcode());
+    return desc.isCall() || inst.getOpcode() == llvm::RISCV::JAL ||
+           inst.getOpcode() == llvm::RISCV::JALR;
   }
 
   bool isMemLoad(const llvm::MCInst &inst) override {
